@@ -97,21 +97,22 @@ def get_preset(device_type):
 
 @simulation_bp.route('/create', methods=['POST'])
 def create_simulation():
-    """Create a new simulation."""
+    """Create a new simulation and automatically start it."""
     try:
         data = request.get_json()
-        
+
         if not data:
             return jsonify({'success': False, 'error': 'No data provided'}), 400
-        
+
         sim_id = str(uuid.uuid4())[:8]
         name = data.get('name', f'Simulation_{sim_id}')
         device_type = data.get('device_type')
         parameters = data.get('parameters', {})
-        
+        auto_run = data.get('auto_run', True)  # Auto-run by default
+
         if not device_type:
             return jsonify({'success': False, 'error': 'device_type is required'}), 400
-        
+
         # Create simulation object
         sim = Simulation(
             sim_id=sim_id,
@@ -119,16 +120,45 @@ def create_simulation():
             device_type=device_type,
             parameters=parameters
         )
-        
+
         # Store it
         store = get_simulation_store()
         store.add(sim)
-        
+
+        # Auto-run the simulation if requested
+        if auto_run:
+            try:
+                # Create output directory
+                output_dir = os.path.join(current_app.config['OUTPUTS_FOLDER'], sim_id)
+                os.makedirs(output_dir, exist_ok=True)
+
+                # Update status
+                store.update(sim_id, status=SimulationStatus.RUNNING, started_at=datetime.now(), progress=0.0)
+
+                # Create and start runner
+                runner = SimulationRunner(
+                    simulation_id=sim_id,
+                    device_type=device_type,
+                    parameters=parameters,
+                    output_dir=output_dir,
+                    progress_callback=lambda prog, msg: _on_simulation_progress(sim_id, prog, msg)
+                )
+
+                _running_simulations[sim_id] = runner
+                runner.start()
+
+                # Get updated simulation
+                sim = store.get(sim_id)
+            except Exception as run_error:
+                # If auto-run fails, still return success for creation
+                print(f"Auto-run failed: {run_error}")
+
         return jsonify({
             'success': True,
-            'simulation': sim.to_dict()
+            'simulation': sim.to_dict(),
+            'auto_started': auto_run
         }), 201
-    
+
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 

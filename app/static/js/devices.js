@@ -242,14 +242,18 @@ function setupFormHandlers() {
             const result = await apiCall('/api/simulation/create', 'POST', {
                 name,
                 device_type: deviceType,
-                parameters
+                parameters,
+                auto_run: true  // Auto-run the simulation
             });
 
             if (result.success) {
-                showAlert(`Simulation "${name}" created successfully!`, 'success');
+                const message = result.auto_started
+                    ? `Simulation "${name}" created and started!`
+                    : `Simulation "${name}" created successfully!`;
+                showAlert(message, 'success');
                 setTimeout(() => {
                     window.location.href = `${getBasePath()}/simulation/${result.simulation.id}`;
-                }, 1500);
+                }, 1000);
             }
         } catch (error) {
             console.error('Error creating simulation:', error);
