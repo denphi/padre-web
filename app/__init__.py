@@ -47,23 +47,27 @@ def create_app(config=None, base_path=None):
     
     # Register blueprints with base path prefix
     from app.routes import main_bp, api_bp, devices_bp, simulation_bp, results_bp
-    url_prefix = app.config['APPLICATION_ROOT'] or None
-    app.register_blueprint(main_bp, url_prefix=url_prefix)
-    app.register_blueprint(api_bp, url_prefix=f"{app.config['APPLICATION_ROOT']}/api" if app.config['APPLICATION_ROOT'] else None)
-    app.register_blueprint(devices_bp, url_prefix=f"{app.config['APPLICATION_ROOT']}/api/devices" if app.config['APPLICATION_ROOT'] else None)
-    app.register_blueprint(simulation_bp, url_prefix=f"{app.config['APPLICATION_ROOT']}/api/simulation" if app.config['APPLICATION_ROOT'] else None)
-    app.register_blueprint(results_bp, url_prefix=f"{app.config['APPLICATION_ROOT']}/api/results" if app.config['APPLICATION_ROOT'] else None)
+    base = app.config['APPLICATION_ROOT']
+
+    if base:
+        # Register main routes at both root "/" and base path for convenience
+        app.register_blueprint(main_bp)  # Serves at /
+        app.register_blueprint(main_bp, url_prefix=base, name='main_prefixed')  # Also serves at /base_path
+        app.register_blueprint(api_bp, url_prefix=f"{base}/api")
+        app.register_blueprint(devices_bp, url_prefix=f"{base}/api/devices")
+        app.register_blueprint(simulation_bp, url_prefix=f"{base}/api/simulation")
+        app.register_blueprint(results_bp, url_prefix=f"{base}/api/results")
+    else:
+        app.register_blueprint(main_bp)
+        app.register_blueprint(api_bp)
+        app.register_blueprint(devices_bp)
+        app.register_blueprint(simulation_bp)
+        app.register_blueprint(results_bp)
 
     # Make base_path available in templates
     @app.context_processor
     def inject_base_path():
         return {'base_path': app.config['APPLICATION_ROOT']}
-
-    # Add redirect from root "/" to base path if base_path is set
-    if app.config['APPLICATION_ROOT']:
-        @app.route('/')
-        def root_redirect():
-            return redirect(app.config['APPLICATION_ROOT'] + '/')
 
     return app
 
