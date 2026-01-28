@@ -123,23 +123,21 @@ class SimulationRunner:
         p = self.parameters
         device_type = p.get('device_type', 'nmos')
 
-        # Build sweep tuples if enabled
+        # Build sweep tuples if enabled (with validation)
         vgs_sweep = None
         vds_sweep = None
 
         if p.get('vg_sweep_enabled', False):
-            vgs_sweep = (
-                p.get('vg_start', 0.0),
-                p.get('vg_end', 1.5),
-                p.get('vg_step', 0.1)
-            )
+            v_start = p.get('vg_start') if p.get('vg_start') is not None else 0.0
+            v_end = p.get('vg_end') if p.get('vg_end') is not None else 1.5
+            v_step = p.get('vg_step') if p.get('vg_step') is not None else 0.1
+            vgs_sweep = (v_start, v_end, v_step)
 
         if p.get('vd_sweep_enabled', False):
-            vds_sweep = (
-                p.get('vd_start', 0.0),
-                p.get('vd_end', 1.5),
-                p.get('vd_step', 0.1)
-            )
+            v_start = p.get('vd_start') if p.get('vd_start') is not None else 0.0
+            v_end = p.get('vd_end') if p.get('vd_end') is not None else 1.5
+            v_step = p.get('vd_step') if p.get('vd_step') is not None else 0.1
+            vds_sweep = (v_start, v_end, v_step)
 
         sim = create_mosfet(
             channel_length=p.get('channel_length', 0.18),
@@ -161,14 +159,13 @@ class SimulationRunner:
         p = self.parameters
         device_type = p.get('device_type', 'n')
 
-        # Build sweep tuple if enabled
+        # Build sweep tuple if enabled (with validation)
         vds_sweep = None
         if p.get('vd_sweep_enabled', False):
-            vds_sweep = (
-                p.get('vd_start', 0.0),
-                p.get('vd_end', 2.0),
-                p.get('vd_step', 0.1)
-            )
+            v_start = p.get('vd_start') if p.get('vd_start') is not None else 0.0
+            v_end = p.get('vd_end') if p.get('vd_end') is not None else 2.0
+            v_step = p.get('vd_step') if p.get('vd_step') is not None else 0.1
+            vds_sweep = (v_start, v_end, v_step)
 
         sim = create_mesfet(
             channel_length=p.get('channel_length', 0.2),
@@ -189,23 +186,21 @@ class SimulationRunner:
         """Create PN diode simulation."""
         p = self.parameters
 
-        # Build sweep tuples if enabled
+        # Build sweep tuples if enabled (with validation)
         forward_sweep = None
         reverse_sweep = None
 
         if p.get('forward_sweep_enabled', False):
-            forward_sweep = (
-                p.get('forward_v_start', 0.0),
-                p.get('forward_v_end', 0.8),
-                p.get('forward_v_step', 0.05)
-            )
+            v_start = p.get('forward_v_start') if p.get('forward_v_start') is not None else 0.0
+            v_end = p.get('forward_v_end') if p.get('forward_v_end') is not None else 0.8
+            v_step = p.get('forward_v_step') if p.get('forward_v_step') is not None else 0.05
+            forward_sweep = (v_start, v_end, v_step)
 
         if p.get('reverse_sweep_enabled', False):
-            reverse_sweep = (
-                p.get('reverse_v_start', 0.0),
-                p.get('reverse_v_end', -5.0),
-                p.get('reverse_v_step', -0.5)
-            )
+            v_start = p.get('reverse_v_start') if p.get('reverse_v_start') is not None else 0.0
+            v_end = p.get('reverse_v_end') if p.get('reverse_v_end') is not None else -5.0
+            v_step = p.get('reverse_v_step') if p.get('reverse_v_step') is not None else -0.5
+            reverse_sweep = (v_start, v_end, v_step)
 
         sim = create_pn_diode(
             length=p.get('length', 1.0),
@@ -230,14 +225,13 @@ class SimulationRunner:
         """Create MOS capacitor simulation."""
         p = self.parameters
 
-        # Build sweep tuple if enabled
+        # Build sweep tuple if enabled (with validation)
         vg_sweep = None
         if p.get('vg_sweep_enabled', False):
-            vg_sweep = (
-                p.get('vg_start', -2.0),
-                p.get('vg_end', 2.0),
-                p.get('vg_step', 0.1)
-            )
+            v_start = p.get('vg_start') if p.get('vg_start') is not None else -2.0
+            v_end = p.get('vg_end') if p.get('vg_end') is not None else 2.0
+            v_step = p.get('vg_step') if p.get('vg_step') is not None else 0.1
+            vg_sweep = (v_start, v_end, v_step)
 
         sim = create_mos_capacitor(
             oxide_thickness=p.get('oxide_thickness', 0.01),
@@ -258,23 +252,21 @@ class SimulationRunner:
         p = self.parameters
         device_type = p.get('device_type', 'npn')
 
-        # Build sweep tuples if enabled
+        # Build sweep tuples if enabled (with validation)
         vce_sweep = None
         gummel_sweep = None
 
         if p.get('vce_sweep_enabled', False):
-            vce_sweep = (
-                p.get('vce_start', 0.0),
-                p.get('vce_end', 5.0),
-                p.get('vce_step', 0.5)
-            )
+            v_start = p.get('vce_start') if p.get('vce_start') is not None else 0.0
+            v_end = p.get('vce_end') if p.get('vce_end') is not None else 5.0
+            v_step = p.get('vce_step') if p.get('vce_step') is not None else 0.5
+            vce_sweep = (v_start, v_end, v_step)
 
         if p.get('vbe_sweep_enabled', False):
-            gummel_sweep = (
-                p.get('vbe_start', 0.0),
-                p.get('vbe_end', 0.8),
-                p.get('vbe_step', 0.05)
-            )
+            v_start = p.get('vbe_start') if p.get('vbe_start') is not None else 0.0
+            v_end = p.get('vbe_end') if p.get('vbe_end') is not None else 0.8
+            v_step = p.get('vbe_step') if p.get('vbe_step') is not None else 0.05
+            gummel_sweep = (v_start, v_end, v_step)
 
         sim = create_bjt(
             device_type=device_type,
@@ -298,23 +290,21 @@ class SimulationRunner:
         """Create Schottky diode simulation."""
         p = self.parameters
 
-        # Build sweep tuples if enabled
+        # Build sweep tuples if enabled (with validation)
         forward_sweep = None
         reverse_sweep = None
 
         if p.get('forward_sweep_enabled', False):
-            forward_sweep = (
-                p.get('forward_v_start', 0.0),
-                p.get('forward_v_end', 0.5),
-                p.get('forward_v_step', 0.02)
-            )
+            v_start = p.get('forward_v_start') if p.get('forward_v_start') is not None else 0.0
+            v_end = p.get('forward_v_end') if p.get('forward_v_end') is not None else 0.5
+            v_step = p.get('forward_v_step') if p.get('forward_v_step') is not None else 0.02
+            forward_sweep = (v_start, v_end, v_step)
 
         if p.get('reverse_sweep_enabled', False):
-            reverse_sweep = (
-                p.get('reverse_v_start', 0.0),
-                p.get('reverse_v_end', -2.0),
-                p.get('reverse_v_step', -0.1)
-            )
+            v_start = p.get('reverse_v_start') if p.get('reverse_v_start') is not None else 0.0
+            v_end = p.get('reverse_v_end') if p.get('reverse_v_end') is not None else -2.0
+            v_step = p.get('reverse_v_step') if p.get('reverse_v_step') is not None else -0.1
+            reverse_sweep = (v_start, v_end, v_step)
 
         sim = create_schottky_diode(
             length=p.get('length', 2.0),
@@ -337,14 +327,13 @@ class SimulationRunner:
         """Create solar cell simulation."""
         p = self.parameters
 
-        # Build sweep tuple if enabled
+        # Build sweep tuple if enabled (with validation)
         forward_sweep = None
         if p.get('v_sweep_enabled', False):
-            forward_sweep = (
-                p.get('v_start', 0.0),
-                p.get('v_end', 0.7),
-                p.get('v_step', 0.02)
-            )
+            v_start = p.get('v_start') if p.get('v_start') is not None else 0.0
+            v_end = p.get('v_end') if p.get('v_end') is not None else 0.7
+            v_step = p.get('v_step') if p.get('v_step') is not None else 0.02
+            forward_sweep = (v_start, v_end, v_step)
 
         sim = create_solar_cell(
             emitter_doping=p.get('emitter_doping', 1e19),
