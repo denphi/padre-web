@@ -60,7 +60,7 @@ async function selectPreset(deviceType, label) {
 
         if (result.success) {
             selectedPreset = result.preset;
-            renderParameterForm(deviceType, result.preset.parameters);
+            renderParameterForm(deviceType, result.preset);
             document.getElementById('submitBtn').disabled = false;
             document.getElementById('refreshDeckBtn').disabled = false;
 
@@ -75,10 +75,15 @@ async function selectPreset(deviceType, label) {
     }
 }
 
-function renderParameterForm(deviceType, parameters) {
+function renderParameterForm(deviceType, preset) {
     const container = document.getElementById('parametersContainer');
+    const parameters = preset.parameters || {};
+    const outputs = preset.outputs || {};
+    const sweep = preset.sweep || {};
 
     let html = '';
+
+    // Render device parameters
     const categories = categorizeParameters(parameters);
 
     for (const [category, params] of Object.entries(categories)) {
@@ -86,29 +91,27 @@ function renderParameterForm(deviceType, parameters) {
                     <h6>${category}</h6>`;
 
         for (const [key, value] of Object.entries(params)) {
-            const inputId = `param_${key}`;
-            const label = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-            const inputType = typeof value === 'number' ? 'number' :
-                             typeof value === 'boolean' ? 'checkbox' : 'text';
+            html += renderInputField(`param_${key}`, key, value);
+        }
+        html += '</div>';
+    }
 
-            if (inputType === 'checkbox') {
-                html += `
-                    <div class="form-check mb-2">
-                        <input class="form-check-input param-input" type="checkbox" id="${inputId}"
-                               ${value ? 'checked' : ''}>
-                        <label class="form-check-label" for="${inputId}">${label}</label>
-                    </div>
-                `;
-            } else {
-                html += `
-                    <div class="mb-2">
-                        <label for="${inputId}" class="form-label small">${label}</label>
-                        <input class="form-control form-control-sm param-input" type="${inputType}"
-                               id="${inputId}" value="${value || ''}"
-                               ${inputType === 'number' ? 'step="any"' : ''}>
-                    </div>
-                `;
-            }
+    // Render output options
+    if (Object.keys(outputs).length > 0) {
+        html += `<div class="parameter-group">
+                    <h6>Output Logging</h6>`;
+        for (const [key, value] of Object.entries(outputs)) {
+            html += renderInputField(`output_${key}`, key, value);
+        }
+        html += '</div>';
+    }
+
+    // Render sweep options
+    if (Object.keys(sweep).length > 0) {
+        html += `<div class="parameter-group">
+                    <h6>Voltage Sweep</h6>`;
+        for (const [key, value] of Object.entries(sweep)) {
+            html += renderInputField(`sweep_${key}`, key, value);
         }
         html += '</div>';
     }
@@ -120,6 +123,31 @@ function renderParameterForm(deviceType, parameters) {
         input.addEventListener('change', onParameterChange);
         input.addEventListener('input', onParameterChange);
     });
+}
+
+function renderInputField(inputId, key, value) {
+    const label = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+    const inputType = typeof value === 'number' ? 'number' :
+                     typeof value === 'boolean' ? 'checkbox' : 'text';
+
+    if (inputType === 'checkbox') {
+        return `
+            <div class="form-check mb-2">
+                <input class="form-check-input param-input" type="checkbox" id="${inputId}"
+                       ${value ? 'checked' : ''}>
+                <label class="form-check-label" for="${inputId}">${label}</label>
+            </div>
+        `;
+    } else {
+        return `
+            <div class="mb-2">
+                <label for="${inputId}" class="form-label small">${label}</label>
+                <input class="form-control form-control-sm param-input" type="${inputType}"
+                       id="${inputId}" value="${value || ''}"
+                       ${inputType === 'number' ? 'step="any"' : ''}>
+            </div>
+        `;
+    }
 }
 
 function onParameterChange() {
@@ -164,17 +192,36 @@ function categorizeParameters(params) {
 
 function collectParameters() {
     const parameters = {};
+
+    // Collect device parameters
     document.querySelectorAll('[id^="param_"]').forEach(input => {
         const key = input.id.replace('param_', '');
-        if (input.type === 'checkbox') {
-            parameters[key] = input.checked;
-        } else if (input.type === 'number') {
-            parameters[key] = input.value ? parseFloat(input.value) : null;
-        } else {
-            parameters[key] = input.value || null;
-        }
+        parameters[key] = getInputValue(input);
     });
+
+    // Collect output options
+    document.querySelectorAll('[id^="output_"]').forEach(input => {
+        const key = input.id.replace('output_', '');
+        parameters[key] = getInputValue(input);
+    });
+
+    // Collect sweep options
+    document.querySelectorAll('[id^="sweep_"]').forEach(input => {
+        const key = input.id.replace('sweep_', '');
+        parameters[key] = getInputValue(input);
+    });
+
     return parameters;
+}
+
+function getInputValue(input) {
+    if (input.type === 'checkbox') {
+        return input.checked;
+    } else if (input.type === 'number') {
+        return input.value ? parseFloat(input.value) : null;
+    } else {
+        return input.value || null;
+    }
 }
 
 function setupFormHandlers() {

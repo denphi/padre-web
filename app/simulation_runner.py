@@ -122,123 +122,240 @@ class SimulationRunner:
         """Create MOSFET simulation."""
         p = self.parameters
         device_type = p.get('device_type', 'nmos')
-        
+
+        # Build sweep tuples if enabled
+        vgs_sweep = None
+        vds_sweep = None
+
+        if p.get('vg_sweep_enabled', False):
+            vgs_sweep = (
+                p.get('vg_start', 0.0),
+                p.get('vg_end', 1.5),
+                p.get('vg_step', 0.1)
+            )
+
+        if p.get('vd_sweep_enabled', False):
+            vds_sweep = (
+                p.get('vd_start', 0.0),
+                p.get('vd_end', 1.5),
+                p.get('vd_step', 0.1)
+            )
+
         sim = create_mosfet(
-            channel_length=p.get('channel_length', 0.05),
+            channel_length=p.get('channel_length', 0.18),
+            gate_oxide_thickness=p.get('gate_oxide_thickness', 0.005),
+            substrate_doping=p.get('substrate_doping', 1e17),
             device_type=device_type,
-            temperature=p.get('temperature', 300)
-        )
-        
-        # Add physics models
-        sim.models = Models(
             temperature=p.get('temperature', 300),
-            srh=p.get('srh', True),
-            conmob=p.get('conmob', True),
-            fldmob=p.get('fldmob', True),
-            bgn=p.get('bgn', False),
+            log_iv=p.get('log_iv', True),
+            vgs_sweep=vgs_sweep,
+            vds=p.get('vds', 0.1),
+            vds_sweep=vds_sweep,
+            vgs=p.get('vgs', 0.0),
         )
-        
-        # Add system configuration
-        sim.system = System(
-            carriers=p.get('carriers', 2),
-            newton=p.get('newton', True),
-        )
-        
+
         return sim
     
     def _create_mesfet_sim(self, temp_dir: str) -> Simulation:
         """Create MESFET simulation."""
         p = self.parameters
-        device_type = p.get('device_type', 'nmesfet')
-        
+        device_type = p.get('device_type', 'n')
+
+        # Build sweep tuple if enabled
+        vds_sweep = None
+        if p.get('vd_sweep_enabled', False):
+            vds_sweep = (
+                p.get('vd_start', 0.0),
+                p.get('vd_end', 2.0),
+                p.get('vd_step', 0.1)
+            )
+
         sim = create_mesfet(
-            channel_length=p.get('channel_length', 0.5),
+            channel_length=p.get('channel_length', 0.2),
+            channel_doping=p.get('channel_doping', 1e17),
             device_type=device_type,
-            temperature=p.get('temperature', 300)
-        )
-        
-        sim.models = Models(
             temperature=p.get('temperature', 300),
-            srh=p.get('srh', True),
             conmob=p.get('conmob', True),
             fldmob=p.get('fldmob', True),
+            log_iv=p.get('log_iv', True),
+            log_bands_eq=p.get('log_bands_eq', True),
+            vgs=p.get('vgs', 0.0),
+            vds_sweep=vds_sweep,
         )
-        
+
         return sim
     
     def _create_pn_diode_sim(self, temp_dir: str) -> Simulation:
         """Create PN diode simulation."""
         p = self.parameters
-        
+
+        # Build sweep tuples if enabled
+        forward_sweep = None
+        reverse_sweep = None
+
+        if p.get('forward_sweep_enabled', False):
+            forward_sweep = (
+                p.get('forward_v_start', 0.0),
+                p.get('forward_v_end', 0.8),
+                p.get('forward_v_step', 0.05)
+            )
+
+        if p.get('reverse_sweep_enabled', False):
+            reverse_sweep = (
+                p.get('reverse_v_start', 0.0),
+                p.get('reverse_v_end', -5.0),
+                p.get('reverse_v_step', -0.5)
+            )
+
         sim = create_pn_diode(
-            temperature=p.get('temperature', 300)
-        )
-        
-        sim.models = Models(
+            length=p.get('length', 1.0),
+            width=p.get('width', 1.0),
+            junction_position=p.get('junction_position', 0.5),
+            p_doping=p.get('p_doping', 1e17),
+            n_doping=p.get('n_doping', 1e17),
             temperature=p.get('temperature', 300),
             srh=p.get('srh', True),
+            conmob=p.get('conmob', True),
+            fldmob=p.get('fldmob', True),
+            log_iv=p.get('log_iv', True),
+            log_bands_eq=p.get('log_bands_eq', True),
+            log_bands_bias=p.get('log_bands_bias', True),
+            forward_sweep=forward_sweep,
+            reverse_sweep=reverse_sweep,
         )
-        
+
         return sim
     
     def _create_mos_capacitor_sim(self, temp_dir: str) -> Simulation:
         """Create MOS capacitor simulation."""
         p = self.parameters
-        
+
+        # Build sweep tuple if enabled
+        vg_sweep = None
+        if p.get('vg_sweep_enabled', False):
+            vg_sweep = (
+                p.get('vg_start', -2.0),
+                p.get('vg_end', 2.0),
+                p.get('vg_step', 0.1)
+            )
+
         sim = create_mos_capacitor(
-            temperature=p.get('temperature', 300)
-        )
-        
-        sim.models = Models(
+            oxide_thickness=p.get('oxide_thickness', 0.01),
+            substrate_doping=p.get('substrate_doping', 1e16),
+            substrate_type=p.get('substrate_type', 'p'),
             temperature=p.get('temperature', 300),
+            conmob=p.get('conmob', True),
+            fldmob=p.get('fldmob', True),
+            log_cv=p.get('log_cv', True),
+            log_bands_eq=p.get('log_bands_eq', True),
+            vg_sweep=vg_sweep,
         )
-        
+
         return sim
     
     def _create_bjt_sim(self, temp_dir: str) -> Simulation:
         """Create BJT simulation."""
         p = self.parameters
         device_type = p.get('device_type', 'npn')
-        
+
+        # Build sweep tuples if enabled
+        vce_sweep = None
+        gummel_sweep = None
+
+        if p.get('vce_sweep_enabled', False):
+            vce_sweep = (
+                p.get('vce_start', 0.0),
+                p.get('vce_end', 5.0),
+                p.get('vce_step', 0.5)
+            )
+
+        if p.get('vbe_sweep_enabled', False):
+            gummel_sweep = (
+                p.get('vbe_start', 0.0),
+                p.get('vbe_end', 0.8),
+                p.get('vbe_step', 0.05)
+            )
+
         sim = create_bjt(
             device_type=device_type,
-            temperature=p.get('temperature', 300)
-        )
-        
-        sim.models = Models(
+            base_width=p.get('base_width', 0.5),
+            base_doping=p.get('base_doping', 1e17),
+            emitter_doping=p.get('emitter_doping', 1e20),
+            collector_doping=p.get('collector_doping', 1e16),
             temperature=p.get('temperature', 300),
             srh=p.get('srh', True),
             conmob=p.get('conmob', True),
+            log_iv=p.get('log_iv', True),
+            log_bands_eq=p.get('log_bands_eq', True),
+            vbe=p.get('vbe', 0.7),
+            vce_sweep=vce_sweep,
+            gummel_sweep=gummel_sweep,
         )
-        
+
         return sim
     
     def _create_schottky_diode_sim(self, temp_dir: str) -> Simulation:
         """Create Schottky diode simulation."""
         p = self.parameters
-        
+
+        # Build sweep tuples if enabled
+        forward_sweep = None
+        reverse_sweep = None
+
+        if p.get('forward_sweep_enabled', False):
+            forward_sweep = (
+                p.get('forward_v_start', 0.0),
+                p.get('forward_v_end', 0.5),
+                p.get('forward_v_step', 0.02)
+            )
+
+        if p.get('reverse_sweep_enabled', False):
+            reverse_sweep = (
+                p.get('reverse_v_start', 0.0),
+                p.get('reverse_v_end', -2.0),
+                p.get('reverse_v_step', -0.1)
+            )
+
         sim = create_schottky_diode(
-            temperature=p.get('temperature', 300)
-        )
-        
-        sim.models = Models(
+            length=p.get('length', 2.0),
+            doping=p.get('n_doping', 1e16),
+            workfunction=p.get('barrier_height', 4.8),
             temperature=p.get('temperature', 300),
+            srh=p.get('srh', True),
+            conmob=p.get('conmob', True),
+            fldmob=p.get('fldmob', True),
+            log_iv=p.get('log_iv', True),
+            log_bands_eq=p.get('log_bands_eq', True),
+            log_bands_bias=p.get('log_bands_bias', True),
+            forward_sweep=forward_sweep,
+            reverse_sweep=reverse_sweep,
         )
-        
+
         return sim
     
     def _create_solar_cell_sim(self, temp_dir: str) -> Simulation:
         """Create solar cell simulation."""
         p = self.parameters
-        
+
+        # Build sweep tuple if enabled
+        forward_sweep = None
+        if p.get('v_sweep_enabled', False):
+            forward_sweep = (
+                p.get('v_start', 0.0),
+                p.get('v_end', 0.7),
+                p.get('v_step', 0.02)
+            )
+
         sim = create_solar_cell(
-            temperature=p.get('temperature', 300)
-        )
-        
-        sim.models = Models(
+            emitter_doping=p.get('emitter_doping', 1e19),
+            base_doping=p.get('base_doping', 1e16),
+            base_thickness=p.get('base_width', 200.0),
             temperature=p.get('temperature', 300),
             srh=p.get('srh', True),
             conmob=p.get('conmob', True),
+            log_iv=p.get('log_iv', True),
+            log_bands_eq=p.get('log_bands_eq', True),
+            forward_sweep=forward_sweep,
         )
-        
+
         return sim

@@ -142,18 +142,36 @@ class SimulationStore:
 
 class DevicePreset:
     """Preset configurations for common devices."""
-    
+
     PRESETS = {
         'pn_diode': {
             'label': 'PN Diode',
             'description': 'Simple P-N junction diode',
             'parameters': {
                 'temperature': 300,
-                'doping_p': 1e16,
-                'doping_n': 1e19,
-                'junction_depth': 0.5,
-                'length': 2.0,
-                'depth': 2.0,
+                'p_doping': 1e17,
+                'n_doping': 1e17,
+                'length': 1.0,
+                'width': 1.0,
+                'junction_position': 0.5,
+                'srh': True,
+                'conmob': True,
+                'fldmob': True,
+            },
+            'outputs': {
+                'log_iv': True,
+                'log_bands_eq': True,
+                'log_bands_bias': True,
+            },
+            'sweep': {
+                'forward_sweep_enabled': True,
+                'forward_v_start': 0.0,
+                'forward_v_end': 0.8,
+                'forward_v_step': 0.05,
+                'reverse_sweep_enabled': False,
+                'reverse_v_start': 0.0,
+                'reverse_v_end': -5.0,
+                'reverse_v_step': -0.5,
             }
         },
         'mosfet': {
@@ -162,11 +180,27 @@ class DevicePreset:
             'parameters': {
                 'device_type': 'nmos',
                 'temperature': 300,
-                'channel_length': 0.05,
-                'channel_width': 1.0,
-                'oxide_thickness': 10e-3,
+                'channel_length': 0.18,
+                'gate_oxide_thickness': 0.005,
                 'substrate_doping': 1e17,
-                'source_drain_doping': 5e19,
+                'srh': True,
+                'conmob': True,
+                'fldmob': True,
+            },
+            'outputs': {
+                'log_iv': True,
+                'log_bands_eq': True,
+                'log_bands_bias': True,
+            },
+            'sweep': {
+                'vg_sweep_enabled': True,
+                'vg_start': 0.0,
+                'vg_end': 1.5,
+                'vg_step': 0.1,
+                'vd_sweep_enabled': True,
+                'vd_start': 0.0,
+                'vd_end': 1.5,
+                'vd_step': 0.1,
             }
         },
         'mesfet': {
@@ -176,9 +210,25 @@ class DevicePreset:
                 'device_type': 'nmesfet',
                 'temperature': 300,
                 'channel_length': 0.5,
-                'channel_width': 100.0,
-                'gate_doping': 1e17,
-                'source_drain_doping': 2e18,
+                'channel_doping': 1e17,
+                'srh': True,
+                'conmob': True,
+                'fldmob': True,
+            },
+            'outputs': {
+                'log_iv': True,
+                'log_bands_eq': True,
+                'log_bands_bias': True,
+            },
+            'sweep': {
+                'vg_sweep_enabled': True,
+                'vg_start': 0.0,
+                'vg_end': -1.0,
+                'vg_step': -0.1,
+                'vd_sweep_enabled': True,
+                'vd_start': 0.0,
+                'vd_end': 2.0,
+                'vd_step': 0.1,
             }
         },
         'mos_capacitor': {
@@ -187,8 +237,19 @@ class DevicePreset:
             'parameters': {
                 'temperature': 300,
                 'substrate_doping': 1e16,
-                'oxide_thickness': 10e-3,
-                'oxide_material': 'sio2',
+                'oxide_thickness': 0.01,
+                'substrate_type': 'p',
+            },
+            'outputs': {
+                'log_cv': True,
+                'log_bands_eq': True,
+                'log_bands_bias': True,
+            },
+            'sweep': {
+                'vg_sweep_enabled': True,
+                'vg_start': -2.0,
+                'vg_end': 2.0,
+                'vg_step': 0.1,
             }
         },
         'bjt': {
@@ -201,6 +262,23 @@ class DevicePreset:
                 'base_doping': 1e18,
                 'emitter_doping': 5e19,
                 'collector_doping': 1e16,
+                'srh': True,
+                'conmob': True,
+            },
+            'outputs': {
+                'log_iv': True,
+                'log_bands_eq': True,
+                'log_bands_bias': True,
+            },
+            'sweep': {
+                'vbe_sweep_enabled': True,
+                'vbe_start': 0.0,
+                'vbe_end': 0.8,
+                'vbe_step': 0.05,
+                'vce_sweep_enabled': False,
+                'vce_start': 0.0,
+                'vce_end': 5.0,
+                'vce_step': 0.5,
             }
         },
         'schottky_diode': {
@@ -208,10 +286,24 @@ class DevicePreset:
             'description': 'Metal-Semiconductor Junction Diode',
             'parameters': {
                 'temperature': 300,
-                'semiconductor_doping': 1e16,
+                'n_doping': 1e16,
                 'barrier_height': 0.7,
                 'length': 1.0,
-                'depth': 1.0,
+            },
+            'outputs': {
+                'log_iv': True,
+                'log_bands_eq': True,
+                'log_bands_bias': True,
+            },
+            'sweep': {
+                'forward_sweep_enabled': True,
+                'forward_v_start': 0.0,
+                'forward_v_end': 0.5,
+                'forward_v_step': 0.02,
+                'reverse_sweep_enabled': False,
+                'reverse_v_start': 0.0,
+                'reverse_v_end': -2.0,
+                'reverse_v_step': -0.1,
             }
         },
         'solar_cell': {
@@ -222,7 +314,21 @@ class DevicePreset:
                 'emitter_doping': 5e19,
                 'base_doping': 5e16,
                 'base_width': 100.0,
-                'grain_size': None,
+                'srh': True,
+                'conmob': True,
+            },
+            'outputs': {
+                'log_iv': True,
+                'log_bands_eq': True,
+                'log_bands_bias': True,
+                'log_generation': True,
+            },
+            'sweep': {
+                'illumination_enabled': True,
+                'v_sweep_enabled': True,
+                'v_start': 0.0,
+                'v_end': 0.7,
+                'v_step': 0.02,
             }
         },
     }
