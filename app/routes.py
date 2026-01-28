@@ -291,6 +291,11 @@ def preview_deck():
         device_type = data.get('device_type')
         parameters = data.get('parameters', {})
 
+        # Debug logging
+        import logging
+        logging.info(f"Preview deck - device_type: {device_type}")
+        logging.info(f"Preview deck - parameters: {parameters}")
+
         if not device_type:
             return jsonify({'success': False, 'error': 'device_type is required'}), 400
 

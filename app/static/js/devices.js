@@ -305,6 +305,9 @@ async function generateDeckPreview() {
 
     const parameters = collectParameters();
 
+    // Debug: log collected parameters
+    console.log('Collected parameters:', parameters);
+
     // Show loading state
     showDeckLoading();
 

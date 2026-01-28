@@ -189,8 +189,6 @@ class DevicePreset:
             },
             'outputs': {
                 'log_iv': True,
-                'log_bands_eq': True,
-                'log_bands_bias': True,
             },
             'sweep': {
                 'vg_sweep_enabled': True,
@@ -218,7 +216,6 @@ class DevicePreset:
             'outputs': {
                 'log_iv': True,
                 'log_bands_eq': True,
-                'log_bands_bias': True,
             },
             'sweep': {
                 'vg_sweep_enabled': True,
@@ -239,11 +236,12 @@ class DevicePreset:
                 'substrate_doping': 1e16,
                 'oxide_thickness': 0.01,
                 'substrate_type': 'p',
+                'conmob': True,
+                'fldmob': True,
             },
             'outputs': {
                 'log_cv': True,
                 'log_bands_eq': True,
-                'log_bands_bias': True,
             },
             'sweep': {
                 'vg_sweep_enabled': True,
@@ -268,7 +266,6 @@ class DevicePreset:
             'outputs': {
                 'log_iv': True,
                 'log_bands_eq': True,
-                'log_bands_bias': True,
             },
             'sweep': {
                 'vbe_sweep_enabled': True,
@@ -320,8 +317,6 @@ class DevicePreset:
             'outputs': {
                 'log_iv': True,
                 'log_bands_eq': True,
-                'log_bands_bias': True,
-                'log_generation': True,
             },
             'sweep': {
                 'illumination_enabled': True,
