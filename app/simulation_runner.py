@@ -60,33 +60,50 @@ class SimulationRunner:
         """Execute the simulation."""
         try:
             self._update_progress(5, "Initializing simulation...")
-            
+
             if not PADRE_AVAILABLE:
                 raise ImportError("nanohubpadre library not installed")
-            
+
             # Create simulation based on device type
             sim = self._create_device_simulation()
             self._update_progress(15, "Device configured")
-            
+
+            # Set working directory for simulation outputs
+            sim.working_dir = self.output_dir
+
             # Generate deck
             deck_content = sim.generate_deck()
             self.deck_content = deck_content
             self._update_progress(25, "Deck generated")
-            
+
             # Save deck to file
             deck_file = os.path.join(self.output_dir, "padre_input.deck")
             with open(deck_file, 'w') as f:
                 f.write(deck_content)
             self.output_files.append(deck_file)
-            
-            # Create a temporary working directory for simulation
-            working_dir = os.path.join(self.output_dir, "sim_work")
-            os.makedirs(working_dir, exist_ok=True)
-            
-            # For now, we'll save the deck but won't execute PADRE
-            # since it requires PADRE executable to be installed
-            self._update_progress(100, "Simulation completed (deck generated)")
-            
+
+            self._update_progress(30, "Running PADRE simulation...")
+
+            # Run the PADRE simulation
+            result = sim.run(
+                output_dir=None,  # Use the output_dir we already set
+                auto_output_dir=False,  # Don't create subdirectory
+                verbose=False,
+                capture_output=True
+            )
+
+            self._update_progress(90, "Simulation finished, collecting outputs...")
+
+            # Check if simulation succeeded
+            if result.returncode != 0:
+                error_output = result.stderr if result.stderr else result.stdout
+                raise RuntimeError(f"PADRE simulation failed with code {result.returncode}: {error_output}")
+
+            # Collect all output files
+            self._collect_output_files()
+
+            self._update_progress(100, "Simulation completed successfully")
+
             logger.info(f"Simulation {self.simulation_id} completed successfully")
             
         except Exception as e:
@@ -96,7 +113,17 @@ class SimulationRunner:
             self._update_progress(100, f"Error: {str(e)}")
         finally:
             self.is_running = False
-    
+
+    def _collect_output_files(self) -> None:
+        """Collect all output files from the simulation directory."""
+        if not os.path.exists(self.output_dir):
+            return
+
+        for filename in os.listdir(self.output_dir):
+            filepath = os.path.join(self.output_dir, filename)
+            if os.path.isfile(filepath) and filepath not in self.output_files:
+                self.output_files.append(filepath)
+
     def _create_device_simulation(self) -> Simulation:
         """Create a simulation based on device type."""
         temp_dir = tempfile.mkdtemp()
