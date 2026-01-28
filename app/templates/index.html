@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row">
+    <div class="col-lg-12">
+        <h1 class="mb-4">
+            <i class="fas fa-tachometer-alt"></i> PADRE Simulation Dashboard
+        </h1>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-lg-3">
+        <div class="card stat-card">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="card-title text-muted">Total Simulations</h6>
+                        <h2 id="totalSimulations">0</h2>
+                    </div>
+                    <i class="fas fa-flask fa-3x text-primary opacity-25"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-3">
+        <div class="card stat-card">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="card-title text-muted">Completed</h6>
+                        <h2 id="completedSimulations" class="text-success">0</h2>
+                    </div>
+                    <i class="fas fa-check-circle fa-3x text-success opacity-25"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-3">
+        <div class="card stat-card">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="card-title text-muted">Running</h6>
+                        <h2 id="runningSimulations" class="text-warning">0</h2>
+                    </div>
+                    <i class="fas fa-spinner fa-3x text-warning opacity-25"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-3">
+        <div class="card stat-card">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="card-title text-muted">Failed</h6>
+                        <h2 id="failedSimulations" class="text-danger">0</h2>
+                    </div>
+                    <i class="fas fa-exclamation-circle fa-3x text-danger opacity-25"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-lg-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Recent Simulations</h5>
+                <a href="/devices" class="btn btn-primary btn-sm">
+                    <i class="fas fa-plus"></i> New Simulation
+                </a>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover" id="simulationsTable">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Device Type</th>
+                                <th>Status</th>
+                                <th>Created</th>
+                                <th>Progress</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="simTableBody">
+                            <tr>
+                                <td colspan="6" class="text-center text-muted py-3">
+                                    <i class="fas fa-hourglass-end"></i> Loading simulations...
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+{% endblock %}

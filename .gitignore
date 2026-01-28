@@ -1,0 +1,56 @@
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.venv
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Flask
+instance/
+.webassets-cache
+*.log
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Application specific
+uploads/
+simulations/
+outputs/
+logs/
+*.db
+*.sqlite
+
+# Markdown files (except README.md)
+DEVELOPMENT.md
+INSTALLATION.md
+PROJECT_COMPLETE.md
+QUICKSTART.md
+START.md
+SUMMARY.md
