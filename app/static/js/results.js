@@ -124,42 +124,67 @@ async function loadOutputFiles() {
 
 function categorizeFile(filename) {
     // Helper function to categorize a file based on its name
+    // PADRE uses names like: vband, cband, pot, ele, hole, qfn, qfp, efield, mesh, iv, etc.
     const name = filename.toLowerCase();
     // Remove common extensions for pattern matching
     const nameBase = name.replace(/\.(txt|dat|out|log)$/i, '');
 
-    // I-V data files
-    if (nameBase.includes('iv') || nameBase.includes('current')) {
+    // I-V data files (iv, idvg, idvd, etc.)
+    if (nameBase.includes('iv') || nameBase.includes('current') ||
+        nameBase.startsWith('id') || nameBase.startsWith('ig') || nameBase.startsWith('is')) {
         return 'iv';
     }
     // C-V data files
     if (nameBase.includes('cv') || nameBase.includes('capacitance')) {
         return 'cv';
     }
-    // Band diagram and Quasi-Fermi files
-    if (nameBase.includes('cb') || nameBase.includes('vb') ||
-        nameBase.includes('ec') || nameBase.includes('ev') ||
-        nameBase.includes('band') || nameBase.includes('qf') ||
-        nameBase.includes('fermi') || nameBase.includes('efn') || nameBase.includes('efp')) {
+    // Band diagram files (vband, cband, vb, cb, etc.)
+    if (nameBase.includes('vband') || nameBase.includes('cband') ||
+        nameBase.includes('band.val') || nameBase.includes('band.con') ||
+        nameBase === 'vb' || nameBase === 'cb' ||
+        nameBase.startsWith('vb') || nameBase.startsWith('cb')) {
         return 'band';
+    }
+    // Quasi-Fermi level files (qfn, qfp, fermi)
+    if (nameBase.includes('qfn') || nameBase.includes('qfp') ||
+        nameBase.includes('qf') || nameBase.includes('fermi') ||
+        nameBase.includes('efn') || nameBase.includes('efp')) {
+        return 'qf';
     }
     // Mesh files
     if (nameBase.includes('mesh') || nameBase.includes('grid')) {
         return 'mesh';
     }
-    // Carrier concentration files
-    if (nameBase.includes('electron') || nameBase.includes('hole') ||
-        nameBase.includes('carrier') || nameBase.includes('density') ||
-        nameBase.includes('concentration')) {
+    // Carrier concentration files (ele, hole, electron, hole concentrations)
+    if (nameBase === 'ele' || nameBase === 'hole' ||
+        nameBase.startsWith('ele') || nameBase.startsWith('hole') ||
+        nameBase.includes('electron') || nameBase.includes('carrier') ||
+        nameBase.includes('density') || nameBase.includes('concentration')) {
         return 'carrier';
     }
-    // Electric field or potential files
-    if (nameBase.includes('field') || nameBase.includes('potential') ||
-        nameBase.includes('phi') || nameBase.includes('psi')) {
+    // Electric field or potential files (pot, efield, phi, psi)
+    if (nameBase === 'pot' || nameBase.startsWith('pot') ||
+        nameBase.includes('efield') || nameBase.includes('field') ||
+        nameBase.includes('potential') || nameBase.includes('phi') || nameBase.includes('psi')) {
+        return 'field';
+    }
+    // Charge/recombination files
+    if (nameBase === 'ro' || nameBase.startsWith('ro') ||
+        nameBase.includes('recomb') || nameBase.includes('charge')) {
+        return 'other';
+    }
+    // Current density files
+    if (nameBase.startsWith('j') || nameBase.includes('jtot') ||
+        nameBase.includes('jelectr') || nameBase.includes('jhole')) {
+        return 'iv';
+    }
+    // Doping files
+    if (nameBase === 'dop' || nameBase.startsWith('dop') ||
+        nameBase.includes('doping') || nameBase.includes('dopant')) {
         return 'field';
     }
     // Input deck files
-    if (name.endsWith('.deck') || name.endsWith('.inp')) {
+    if (name.endsWith('.deck') || name.endsWith('.inp') || name.endsWith('.in')) {
         return 'deck';
     }
     return 'other';

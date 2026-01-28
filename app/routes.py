@@ -461,68 +461,183 @@ def get_file_content(sim_id, filename):
 
 
 def _parse_padre_output_file(filepath, filename):
-    """Parse a PADRE output file and return structured data."""
+    """Parse a PADRE output file using the nanohubpadre library."""
     data = {
         'type': 'unknown',
         'columns': [],
         'values': [],
-        'raw': ''
+        'raw': '',
+        'variable': ''
     }
 
     try:
-        with open(filepath, 'r') as f:
+        # Read raw content for display
+        with open(filepath, 'r', errors='replace') as f:
             content = f.read()
             data['raw'] = content
 
+        # Try to use nanohubpadre library for parsing
+        try:
+            from app.simulation_runner import PADRE_AVAILABLE
+            if PADRE_AVAILABLE:
+                from nanohubpadre import OutputManager, OutputType, OutputEntry
+                from nanohubpadre.outputs import PlotData
+                import numpy as np
+
+                # Get the output directory and filename
+                output_dir = os.path.dirname(filepath)
+                name_base = os.path.splitext(filename)[0]
+
+                # Create an OutputManager for this directory
+                output_mgr = OutputManager(working_dir=output_dir)
+
+                # Determine output type based on filename patterns
+                output_type = _determine_output_type(name_base)
+                variable = _determine_variable(name_base)
+
+                # Register this output
+                output_mgr.register(name_base, output_type, variable=variable)
+
+                # Load the data
+                output_mgr.load_all()
+
+                # Get the parsed data
+                parsed_data = output_mgr.get(name_base)
+
+                if parsed_data is not None:
+                    if isinstance(parsed_data, PlotData):
+                        # Convert PlotData to our format
+                        data['type'] = _output_type_to_string(output_type)
+                        data['variable'] = parsed_data.variable or variable
+                        data['columns'] = [parsed_data.x_label, parsed_data.y_label or parsed_data.variable]
+                        # Convert numpy arrays to list of [x, y] pairs
+                        data['values'] = [[float(x), float(y)] for x, y in zip(parsed_data.x, parsed_data.y)]
+                        return data
+                    elif hasattr(parsed_data, 'voltage') and hasattr(parsed_data, 'current'):
+                        # IVData object
+                        data['type'] = 'iv'
+                        data['variable'] = 'iv'
+                        data['columns'] = ['Voltage (V)', 'Current (A)']
+                        data['values'] = [[float(v), float(i)] for v, i in zip(parsed_data.voltage, parsed_data.current)]
+                        return data
+        except Exception as lib_error:
+            # Fall back to manual parsing
+            print(f"Library parsing failed: {lib_error}, falling back to manual parsing")
+            pass
+
+        # Fallback: Manual parsing
         lines = content.strip().split('\n')
-
-        # Determine file type based on filename or content
         name_lower = filename.lower()
-        # Remove common extensions for pattern matching
-        name_base = name_lower.replace('.txt', '').replace('.dat', '').replace('.out', '')
+        name_base = name_lower.replace('.txt', '').replace('.dat', '').replace('.out', '').replace('.log', '')
 
-        # I-V data files (iv, iv_forward, current, etc.)
-        if 'iv' in name_base or 'current' in name_base:
+        # Use pattern matching for file type
+        if name_base == 'iv' or name_base.endswith('_iv') or name_base.startswith('iv_'):
             data['type'] = 'iv'
+            data['variable'] = 'iv'
             data = _parse_iv_file(lines, data)
-        # C-V data files (cv, capacitance)
-        elif 'cv' in name_base or 'capacitance' in name_base:
+        elif name_base == 'cv' or name_base.endswith('_cv') or name_base.startswith('cv_'):
             data['type'] = 'cv'
-            data = _parse_iv_file(lines, data)  # Same format as IV
-        # Band diagram files (cb = conduction band, vb = valence band, ec, ev)
-        elif any(pattern in name_base for pattern in ['cb', 'vb', 'ec', 'ev', 'band', 'conduction', 'valence']):
+            data['variable'] = 'cv'
+            data = _parse_iv_file(lines, data)
+        elif name_base.startswith('vb') or name_base.startswith('valence'):
             data['type'] = 'band'
-            data = _parse_1d_data_file(lines, data)
-        # Quasi-Fermi level files (qf, qfn, qfp, fermi)
-        elif any(pattern in name_base for pattern in ['qf', 'fermi', 'efn', 'efp']):
+            data['variable'] = 'band_val'
+            data = _parse_1d_plot_file(lines, data)
+            data['columns'] = ['Position (μm)', 'Energy (eV)']
+        elif name_base.startswith('cb') or name_base.startswith('conduction'):
+            data['type'] = 'band'
+            data['variable'] = 'band_con'
+            data = _parse_1d_plot_file(lines, data)
+            data['columns'] = ['Position (μm)', 'Energy (eV)']
+        elif name_base.startswith('qfn') or name_base.startswith('efn'):
             data['type'] = 'qf'
-            data = _parse_1d_data_file(lines, data)
-        # Mesh file
-        elif 'mesh' in name_base or 'grid' in name_base:
+            data['variable'] = 'qfn'
+            data = _parse_1d_plot_file(lines, data)
+            data['columns'] = ['Position (μm)', 'Energy (eV)']
+        elif name_base.startswith('qfp') or name_base.startswith('efp'):
+            data['type'] = 'qf'
+            data['variable'] = 'qfp'
+            data = _parse_1d_plot_file(lines, data)
+            data['columns'] = ['Position (μm)', 'Energy (eV)']
+        elif name_base == 'mesh' or name_base.endswith('.pg'):
             data['type'] = 'mesh'
+            data['variable'] = 'mesh'
             data = _parse_mesh_file(lines, data)
-        # Carrier concentration files
-        elif any(pattern in name_base for pattern in ['electron', 'hole', 'carrier', 'density', 'concentration']):
-            data['type'] = 'carrier'
-            data = _parse_1d_data_file(lines, data)
-        # Electric field or potential files
-        elif any(pattern in name_base for pattern in ['field', 'potential', 'phi', 'psi']):
-            data['type'] = 'field'
-            data = _parse_1d_data_file(lines, data)
-        # Doping profile
-        elif any(pattern in name_base for pattern in ['doping', 'dopant', 'na', 'nd']):
-            data['type'] = 'doping'
-            data = _parse_1d_data_file(lines, data)
-        # Generic 1D plot data - try to parse anything else
+        elif name_base in ['eq', 'fwd', 'rev'] or name_base.endswith('_eq') or name_base.endswith('_fwd'):
+            data['type'] = 'solution'
+            data['variable'] = 'solution'
+            data['values'] = []
+        elif 'deck' in name_base or 'input' in name_base:
+            data['type'] = 'deck'
+            data['variable'] = 'deck'
+            data['values'] = []
         else:
-            data = _parse_1d_data_file(lines, data)
+            # Try generic 1D plot parsing
+            data = _parse_1d_plot_file(lines, data)
             if data['values'] and len(data['values']) > 0:
                 data['type'] = '1d'
+                data['variable'] = 'unknown'
 
     except Exception as e:
         data['error'] = str(e)
 
     return data
+
+
+def _determine_output_type(name_base):
+    """Determine OutputType from filename."""
+    from nanohubpadre import OutputType
+
+    name_lower = name_base.lower()
+
+    if name_lower == 'iv' or 'iv' in name_lower:
+        return OutputType.IV_DATA
+    elif name_lower == 'mesh' or name_lower.endswith('.pg'):
+        return OutputType.MESH
+    elif name_lower in ['eq', 'fwd', 'rev'] or any(name_lower.endswith(s) for s in ['_eq', '_fwd', '_rev']):
+        return OutputType.SOLUTION
+    else:
+        return OutputType.PLOT_1D
+
+
+def _determine_variable(name_base):
+    """Determine variable name from filename."""
+    name_lower = name_base.lower()
+
+    if name_lower.startswith('vb') or 'valence' in name_lower:
+        return 'band_val'
+    elif name_lower.startswith('cb') or 'conduction' in name_lower:
+        return 'band_con'
+    elif name_lower.startswith('qfn') or name_lower.startswith('efn'):
+        return 'qfn'
+    elif name_lower.startswith('qfp') or name_lower.startswith('efp'):
+        return 'qfp'
+    elif name_lower.startswith('ele') or 'electron' in name_lower:
+        return 'electrons'
+    elif name_lower.startswith('hole'):
+        return 'holes'
+    elif name_lower.startswith('pot') or name_lower.startswith('phi'):
+        return 'potential'
+    elif 'field' in name_lower:
+        return 'e_field'
+    elif 'dop' in name_lower:
+        return 'doping'
+    else:
+        return ''
+
+
+def _output_type_to_string(output_type):
+    """Convert OutputType enum to string for frontend."""
+    from nanohubpadre import OutputType
+
+    mapping = {
+        OutputType.IV_DATA: 'iv',
+        OutputType.MESH: 'mesh',
+        OutputType.SOLUTION: 'solution',
+        OutputType.PLOT_1D: '1d',
+        OutputType.PLOT_2D: '2d',
+    }
+    return mapping.get(output_type, 'unknown')
 
 
 def _parse_iv_file(lines, data):
