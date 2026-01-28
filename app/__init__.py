@@ -45,24 +45,17 @@ def create_app(config=None, base_path=None):
     # Setup logging
     setup_logging(app)
     
-    # Register blueprints with base path prefix
+    # Register blueprints
+    # Note: When behind a proxy, the proxy strips the base path, so the app
+    # always sees requests at "/". The base_path is only used for generating
+    # correct URLs in templates and JavaScript for links/redirects.
     from app.routes import main_bp, api_bp, devices_bp, simulation_bp, results_bp
-    base = app.config['APPLICATION_ROOT']
 
-    if base:
-        # Register main routes at both root "/" and base path for convenience
-        app.register_blueprint(main_bp)  # Serves at /
-        app.register_blueprint(main_bp, url_prefix=base, name='main_prefixed')  # Also serves at /base_path
-        app.register_blueprint(api_bp, url_prefix=f"{base}/api")
-        app.register_blueprint(devices_bp, url_prefix=f"{base}/api/devices")
-        app.register_blueprint(simulation_bp, url_prefix=f"{base}/api/simulation")
-        app.register_blueprint(results_bp, url_prefix=f"{base}/api/results")
-    else:
-        app.register_blueprint(main_bp)
-        app.register_blueprint(api_bp)
-        app.register_blueprint(devices_bp)
-        app.register_blueprint(simulation_bp)
-        app.register_blueprint(results_bp)
+    app.register_blueprint(main_bp)
+    app.register_blueprint(api_bp)
+    app.register_blueprint(devices_bp)
+    app.register_blueprint(simulation_bp)
+    app.register_blueprint(results_bp)
 
     # Make base_path available in templates
     @app.context_processor
