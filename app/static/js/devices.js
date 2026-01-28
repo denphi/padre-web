@@ -201,7 +201,7 @@ function setupFormHandlers() {
             if (result.success) {
                 showAlert(`Simulation "${name}" created successfully!`, 'success');
                 setTimeout(() => {
-                    window.location.href = `/simulation/${result.simulation.id}`;
+                    window.location.href = `${getBasePath()}/simulation/${result.simulation.id}`;
                 }, 1500);
             }
         } catch (error) {

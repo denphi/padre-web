@@ -15,7 +15,7 @@ async function loadResults() {
             
             if (resultsSimulation.status !== 'completed') {
                 showAlert('This simulation has not completed yet!', 'warning');
-                document.getElementById('backToSimBtn').href = `/simulation/${simId}`;
+                document.getElementById('backToSimBtn').href = `${getBasePath()}/simulation/${simId}`;
                 return;
             }
             
@@ -30,11 +30,11 @@ async function loadResults() {
 
 function renderResultsHeader() {
     const sim = resultsSimulation;
-    
+
     document.getElementById('resultsTitle').textContent = sim.name;
-    document.getElementById('resultsDescription').textContent = 
+    document.getElementById('resultsDescription').textContent =
         `Device: ${sim.device_type.toUpperCase()} • Completed: ${formatDate(sim.completed_at)}`;
-    document.getElementById('backToSimBtn').href = `/simulation/${simId}`;
+    document.getElementById('backToSimBtn').href = `${getBasePath()}/simulation/${simId}`;
 }
 
 async function loadOutputFiles() {
@@ -58,8 +58,9 @@ function renderOutputFiles(files) {
         return;
     }
     
+    const basePath = getBasePath();
     container.innerHTML = files.map(file => `
-        <a href="/api/results/${simId}/download/${file.name}" 
+        <a href="${basePath}/api/results/${simId}/download/${file.name}"
            class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
             <div>
                 <h6 class="mb-1">${file.name}</h6>

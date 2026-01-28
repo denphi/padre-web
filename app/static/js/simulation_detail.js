@@ -244,7 +244,7 @@ function updateButtonStates() {
 
     // View results button
     viewResultsBtn.disabled = sim.status !== 'completed';
-    viewResultsBtn.href = `/results/${simId}`;
+    viewResultsBtn.href = `${getBasePath()}/results/${simId}`;
 
     // Download deck button
     downloadDeckBtn.disabled = !sim.deck_content;
@@ -337,7 +337,7 @@ async function deleteSimulation() {
 
         if (result.success) {
             showAlert('Simulation deleted!', 'success');
-            setTimeout(() => window.location.href = '/', 1500);
+            setTimeout(() => window.location.href = getBasePath() + '/', 1500);
         }
     } catch (error) {
         console.error('Error deleting simulation:', error);

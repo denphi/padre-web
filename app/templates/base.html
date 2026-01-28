@@ -6,12 +6,12 @@
     <title>PADRE Web UI</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="{{ base_path }}{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body>
     <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
         <div class="container-fluid">
-            <a class="navbar-brand" href="/">
+            <a class="navbar-brand" href="{{ base_path }}/">
                 <i class="fas fa-microchip"></i> PADRE Web UI
             </a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
@@ -20,10 +20,10 @@
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav ms-auto">
                     <li class="nav-item">
-                        <a class="nav-link" href="/">Dashboard</a>
+                        <a class="nav-link" href="{{ base_path }}/">Dashboard</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="/devices">Devices</a>
+                        <a class="nav-link" href="{{ base_path }}/devices">Devices</a>
                     </li>
                 </ul>
             </div>
@@ -43,7 +43,11 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.3.0/dist/chart.min.js"></script>
     <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
-    <script src="{{ url_for('static', filename='js/utils.js') }}"></script>
+    <script>
+        // Base path for API calls and navigation (set by Flask)
+        const BASE_PATH = '{{ base_path }}';
+    </script>
+    <script src="{{ base_path }}{{ url_for('static', filename='js/utils.js') }}"></script>
     {% block scripts %}{% endblock %}
 </body>
 </html>

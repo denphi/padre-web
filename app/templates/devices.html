@@ -133,7 +133,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="{{ url_for('static', filename='js/devices.js') }}"></script>
+<script src="{{ base_path }}{{ url_for('static', filename='js/devices.js') }}"></script>
 <script>
 // Make deck preview content clickable to open fullscreen
 document.getElementById('deckPreviewContent').addEventListener('click', () => {

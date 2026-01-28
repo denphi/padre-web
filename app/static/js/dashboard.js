@@ -62,8 +62,9 @@ function renderSimulations() {
         return;
     }
     
+    const basePath = getBasePath();
     tbody.innerHTML = allSimulations.map(sim => `
-        <tr style="cursor: pointer;" onclick="window.location.href='/simulation/${sim.id}'">
+        <tr style="cursor: pointer;" onclick="window.location.href='${basePath}/simulation/${sim.id}'">
             <td><strong>${sim.name}</strong></td>
             <td>
                 <span class="badge bg-info">${sim.device_type.toUpperCase()}</span>
@@ -77,7 +78,7 @@ function renderSimulations() {
             <td><small>${formatDate(sim.created_at)}</small></td>
             <td>
                 <div class="progress" style="height: 20px;">
-                    <div class="progress-bar" role="progressbar" 
+                    <div class="progress-bar" role="progressbar"
                          style="width: ${sim.progress}%"
                          aria-valuenow="${sim.progress}" aria-valuemin="0" aria-valuemax="100">
                         <span style="font-size: 12px;">${Math.round(sim.progress)}%</span>
@@ -85,7 +86,7 @@ function renderSimulations() {
                 </div>
             </td>
             <td>
-                <a href="/simulation/${sim.id}" class="btn btn-sm btn-outline-primary" title="View details">
+                <a href="${basePath}/simulation/${sim.id}" class="btn btn-sm btn-outline-primary" title="View details">
                     <i class="fas fa-arrow-right"></i>
                 </a>
             </td>

@@ -69,7 +69,7 @@
         <div class="card">
             <div class="card-header d-flex justify-content-between align-items-center">
                 <h5 class="mb-0">Recent Simulations</h5>
-                <a href="/devices" class="btn btn-primary btn-sm">
+                <a href="{{ base_path }}/devices" class="btn btn-primary btn-sm">
                     <i class="fas fa-plus"></i> New Simulation
                 </a>
             </div>
@@ -103,5 +103,5 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+<script src="{{ base_path }}{{ url_for('static', filename='js/dashboard.js') }}"></script>
 {% endblock %}

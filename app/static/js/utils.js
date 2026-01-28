@@ -109,6 +109,11 @@ function renderParameters(parameters) {
 
 // API Functions
 
+// Get base path (set by Flask in base.html)
+function getBasePath() {
+    return typeof BASE_PATH !== 'undefined' ? BASE_PATH : '';
+}
+
 async function apiCall(endpoint, method = 'GET', data = null) {
     const options = {
         method,
@@ -116,19 +121,22 @@ async function apiCall(endpoint, method = 'GET', data = null) {
             'Content-Type': 'application/json',
         }
     };
-    
+
     if (data && (method === 'POST' || method === 'PUT')) {
         options.body = JSON.stringify(data);
     }
-    
+
+    // Prepend base path to endpoint
+    const fullEndpoint = getBasePath() + endpoint;
+
     try {
-        const response = await fetch(endpoint, options);
+        const response = await fetch(fullEndpoint, options);
         const result = await response.json();
-        
+
         if (!response.ok) {
             throw new Error(result.error || `HTTP Error: ${response.status}`);
         }
-        
+
         return result;
     } catch (error) {
         console.error('API call failed:', error);
