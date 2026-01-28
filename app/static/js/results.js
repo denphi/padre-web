@@ -122,6 +122,49 @@ async function loadOutputFiles() {
     }
 }
 
+function categorizeFile(filename) {
+    // Helper function to categorize a file based on its name
+    const name = filename.toLowerCase();
+    // Remove common extensions for pattern matching
+    const nameBase = name.replace(/\.(txt|dat|out|log)$/i, '');
+
+    // I-V data files
+    if (nameBase.includes('iv') || nameBase.includes('current')) {
+        return 'iv';
+    }
+    // C-V data files
+    if (nameBase.includes('cv') || nameBase.includes('capacitance')) {
+        return 'cv';
+    }
+    // Band diagram and Quasi-Fermi files
+    if (nameBase.includes('cb') || nameBase.includes('vb') ||
+        nameBase.includes('ec') || nameBase.includes('ev') ||
+        nameBase.includes('band') || nameBase.includes('qf') ||
+        nameBase.includes('fermi') || nameBase.includes('efn') || nameBase.includes('efp')) {
+        return 'band';
+    }
+    // Mesh files
+    if (nameBase.includes('mesh') || nameBase.includes('grid')) {
+        return 'mesh';
+    }
+    // Carrier concentration files
+    if (nameBase.includes('electron') || nameBase.includes('hole') ||
+        nameBase.includes('carrier') || nameBase.includes('density') ||
+        nameBase.includes('concentration')) {
+        return 'carrier';
+    }
+    // Electric field or potential files
+    if (nameBase.includes('field') || nameBase.includes('potential') ||
+        nameBase.includes('phi') || nameBase.includes('psi')) {
+        return 'field';
+    }
+    // Input deck files
+    if (name.endsWith('.deck') || name.endsWith('.inp')) {
+        return 'deck';
+    }
+    return 'other';
+}
+
 function renderOutputFiles(files) {
     const container = document.getElementById('outputFilesList');
 
@@ -132,58 +175,31 @@ function renderOutputFiles(files) {
 
     const basePath = getBasePath();
 
-    // Categorize files
-    const ivFiles = [];
-    const bandFiles = [];
-    const meshFiles = [];
-    const deckFiles = [];
-    const otherFiles = [];
+    // Categorize files using the helper function
+    const categories = {
+        iv: { label: 'I-V Data', files: [] },
+        cv: { label: 'C-V Data', files: [] },
+        band: { label: 'Band Diagrams', files: [] },
+        mesh: { label: 'Mesh', files: [] },
+        carrier: { label: 'Carrier Density', files: [] },
+        field: { label: 'Electric Field/Potential', files: [] },
+        deck: { label: 'Input Files', files: [] },
+        other: { label: 'Other', files: [] }
+    };
 
     for (const file of files) {
-        const name = file.name.toLowerCase();
-        if (name === 'iv' || name.includes('iv.') || name.startsWith('iv')) {
-            ivFiles.push(file);
-        } else if (name.startsWith('cb') || name.startsWith('vb') || name.startsWith('qf')) {
-            bandFiles.push(file);
-        } else if (name.includes('mesh')) {
-            meshFiles.push(file);
-        } else if (name.endsWith('.deck') || name.endsWith('.inp')) {
-            deckFiles.push(file);
-        } else {
-            otherFiles.push(file);
-        }
+        const category = categorizeFile(file.name);
+        categories[category].files.push(file);
     }
 
     let html = '';
 
-    // I-V Files
-    if (ivFiles.length > 0) {
-        html += '<div class="list-group-item bg-light fw-bold small py-2">I-V Data</div>';
-        html += ivFiles.map(file => renderFileItem(file, 'iv', basePath)).join('');
-    }
-
-    // Band Files
-    if (bandFiles.length > 0) {
-        html += '<div class="list-group-item bg-light fw-bold small py-2">Band Diagrams</div>';
-        html += bandFiles.map(file => renderFileItem(file, 'band', basePath)).join('');
-    }
-
-    // Mesh Files
-    if (meshFiles.length > 0) {
-        html += '<div class="list-group-item bg-light fw-bold small py-2">Mesh</div>';
-        html += meshFiles.map(file => renderFileItem(file, 'mesh', basePath)).join('');
-    }
-
-    // Deck Files
-    if (deckFiles.length > 0) {
-        html += '<div class="list-group-item bg-light fw-bold small py-2">Input Files</div>';
-        html += deckFiles.map(file => renderFileItem(file, 'deck', basePath)).join('');
-    }
-
-    // Other Files
-    if (otherFiles.length > 0) {
-        html += '<div class="list-group-item bg-light fw-bold small py-2">Other</div>';
-        html += otherFiles.map(file => renderFileItem(file, 'other', basePath)).join('');
+    // Render each category that has files
+    for (const [catKey, catData] of Object.entries(categories)) {
+        if (catData.files.length > 0) {
+            html += `<div class="list-group-item bg-light fw-bold small py-2">${catData.label}</div>`;
+            html += catData.files.map(file => renderFileItem(file, catKey, basePath)).join('');
+        }
     }
 
     container.innerHTML = html;
@@ -227,8 +243,11 @@ function renderFileItem(file, fileType, basePath) {
 function getFileIcon(fileType) {
     switch (fileType) {
         case 'iv': return 'fas fa-chart-line';
+        case 'cv': return 'fas fa-chart-area';
         case 'band': return 'fas fa-wave-square';
         case 'mesh': return 'fas fa-th';
+        case 'carrier': return 'fas fa-atom';
+        case 'field': return 'fas fa-bolt';
         case 'deck': return 'fas fa-file-code';
         default: return 'fas fa-file';
     }
@@ -266,17 +285,102 @@ function plotSelectedFile(data, filename, fileType) {
 
     const values = data.values;
 
-    // Determine how to plot based on data type
-    if (data.type === 'iv' || fileType === 'iv') {
-        plotIVData(containerId, values, filename);
-    } else if (data.type === 'band' || fileType === 'band') {
-        plotBandData(containerId, values, filename);
-    } else if (data.type === 'mesh' || fileType === 'mesh') {
-        plotMeshData(containerId, values, filename);
-    } else {
-        // Generic 2D plot
-        plotGenericData(containerId, values, filename, data.columns);
+    // Determine how to plot based on data type (prefer backend type, fallback to frontend category)
+    const plotType = data.type !== 'unknown' && data.type !== '1d' ? data.type : fileType;
+
+    switch (plotType) {
+        case 'iv':
+        case 'cv':
+            plotIVData(containerId, values, filename);
+            break;
+        case 'band':
+        case 'qf':
+            plotBandData(containerId, values, filename);
+            break;
+        case 'mesh':
+            plotMeshData(containerId, values, filename);
+            break;
+        case 'carrier':
+            plotCarrierData(containerId, values, filename);
+            break;
+        case 'field':
+            plotFieldData(containerId, values, filename);
+            break;
+        default:
+            // Generic 2D plot
+            plotGenericData(containerId, values, filename, data.columns);
     }
+}
+
+function plotCarrierData(containerId, values, filename) {
+    const x = values.map(row => row[0]);
+    const y = values.map(row => row[1]);
+
+    let traceName = 'Carrier Density';
+    let color = '#6f42c1';
+    const nameLower = filename.toLowerCase();
+    if (nameLower.includes('electron')) {
+        traceName = 'Electron Density';
+        color = '#007bff';
+    } else if (nameLower.includes('hole')) {
+        traceName = 'Hole Density';
+        color = '#dc3545';
+    }
+
+    const trace = {
+        x: x,
+        y: y,
+        type: 'scatter',
+        mode: 'lines',
+        name: traceName,
+        line: { color: color, width: 2 }
+    };
+
+    const layout = {
+        title: `Carrier Density - ${filename}`,
+        xaxis: { title: 'Position (μm)', gridcolor: '#e0e0e0' },
+        yaxis: { title: 'Density (cm⁻³)', gridcolor: '#e0e0e0', type: 'log', exponentformat: 'e' },
+        plot_bgcolor: '#fafafa',
+        paper_bgcolor: '#ffffff',
+        margin: { t: 50, r: 30, b: 50, l: 70 }
+    };
+
+    Plotly.newPlot(containerId, [trace], layout, { responsive: true });
+}
+
+function plotFieldData(containerId, values, filename) {
+    const x = values.map(row => row[0]);
+    const y = values.map(row => row[1]);
+
+    let traceName = 'Electric Field';
+    let yLabel = 'Field (V/cm)';
+    let color = '#fd7e14';
+    const nameLower = filename.toLowerCase();
+    if (nameLower.includes('potential') || nameLower.includes('phi') || nameLower.includes('psi')) {
+        traceName = 'Electrostatic Potential';
+        yLabel = 'Potential (V)';
+        color = '#20c997';
+    }
+
+    const trace = {
+        x: x,
+        y: y,
+        type: 'scatter',
+        mode: 'lines',
+        name: traceName,
+        line: { color: color, width: 2 }
+    };
+
+    const layout = {
+        title: `${traceName} - ${filename}`,
+        xaxis: { title: 'Position (μm)', gridcolor: '#e0e0e0' },
+        yaxis: { title: yLabel, gridcolor: '#e0e0e0', exponentformat: 'e' },
+        plot_bgcolor: '#fafafa',
+        paper_bgcolor: '#ffffff',
+        margin: { t: 50, r: 30, b: 50, l: 70 }
+    };
+
+    Plotly.newPlot(containerId, [trace], layout, { responsive: true });
 }
 
 function plotIVData(containerId, values, filename) {
@@ -312,18 +416,27 @@ function plotBandData(containerId, values, filename) {
     let traceName = filename;
     let color = '#333';
     const nameLower = filename.toLowerCase();
-    if (nameLower.startsWith('cb')) {
+
+    // Check for conduction band patterns
+    if (nameLower.includes('cb') || nameLower.includes('ec') || nameLower.includes('conduction')) {
         traceName = 'Conduction Band';
         color = '#dc3545';
-    } else if (nameLower.startsWith('vb')) {
+    // Check for valence band patterns
+    } else if (nameLower.includes('vb') || nameLower.includes('ev') || nameLower.includes('valence')) {
         traceName = 'Valence Band';
         color = '#007bff';
-    } else if (nameLower.startsWith('qfn')) {
+    // Check for electron quasi-Fermi patterns
+    } else if (nameLower.includes('qfn') || nameLower.includes('efn')) {
         traceName = 'Quasi-Fermi (e)';
         color = '#28a745';
-    } else if (nameLower.startsWith('qfp')) {
+    // Check for hole quasi-Fermi patterns
+    } else if (nameLower.includes('qfp') || nameLower.includes('efp')) {
         traceName = 'Quasi-Fermi (h)';
         color = '#fd7e14';
+    // Generic quasi-Fermi
+    } else if (nameLower.includes('qf') || nameLower.includes('fermi')) {
+        traceName = 'Quasi-Fermi';
+        color = '#17a2b8';
     }
 
     const trace = {
@@ -402,28 +515,37 @@ function plotGenericData(containerId, values, filename, columns) {
 }
 
 async function loadAndDisplayData(files) {
-    // Categorize files by type
+    // Categorize files by type using the helper function
     const ivFiles = [];
+    const cvFiles = [];
     const bandFiles = [];
     const meshFiles = [];
 
     for (const file of files) {
-        const name = file.name.toLowerCase();
-        if (name === 'iv' || name.includes('iv.') || name.startsWith('iv')) {
-            ivFiles.push(file);
-        } else if (name.startsWith('cb') || name.startsWith('vb') || name.startsWith('qf')) {
-            bandFiles.push(file);
-        } else if (name.includes('mesh')) {
-            meshFiles.push(file);
+        const category = categorizeFile(file.name);
+        switch (category) {
+            case 'iv':
+                ivFiles.push(file);
+                break;
+            case 'cv':
+                cvFiles.push(file);
+                break;
+            case 'band':
+                bandFiles.push(file);
+                break;
+            case 'mesh':
+                meshFiles.push(file);
+                break;
         }
     }
 
-    // Load and display I-V curves in the Plots tab
-    if (ivFiles.length > 0) {
-        await loadIVData(ivFiles);
+    // Load and display I-V or C-V curves in the Plots tab
+    const plotFiles = [...ivFiles, ...cvFiles];
+    if (plotFiles.length > 0) {
+        await loadIVData(plotFiles);
     } else {
         document.getElementById('plotsVisualization').innerHTML =
-            '<p class="text-muted text-center p-5">No I-V data available. Click on an output file to view its plot.</p>';
+            '<p class="text-muted text-center p-5">No I-V or C-V data available. Click on an output file to view its plot.</p>';
     }
 
     // Load and display band diagrams
@@ -502,14 +624,30 @@ async function loadBandData(files) {
     const dataContainer = document.getElementById('solutionDataView');
     dataContainer.innerHTML = '';
 
-    // Group files by prefix (eq, fwd, rev, etc.)
+    // Group files by bias condition (eq, fwd, rev, etc.)
     const fileGroups = {};
     for (const file of files) {
         const name = file.name.toLowerCase();
-        let prefix = 'other';
-        if (name.startsWith('cb') || name.startsWith('vb') || name.startsWith('qf')) {
-            prefix = name.substring(2) || 'eq';
+        const nameBase = name.replace(/\.(txt|dat|out|log)$/i, '');
+
+        // Try to extract the bias condition from the filename
+        let prefix = 'eq';  // Default to equilibrium
+        if (nameBase.includes('_eq') || nameBase.includes('eq_') || nameBase.endsWith('eq')) {
+            prefix = 'eq';
+        } else if (nameBase.includes('_fwd') || nameBase.includes('fwd_') || nameBase.includes('forward')) {
+            prefix = 'fwd';
+        } else if (nameBase.includes('_rev') || nameBase.includes('rev_') || nameBase.includes('reverse')) {
+            prefix = 'rev';
+        } else if (nameBase.includes('_bias') || nameBase.includes('bias_')) {
+            prefix = 'bias';
+        } else {
+            // Extract suffix after band type prefix (cb, vb, qf, etc.)
+            const match = nameBase.match(/^(cb|vb|qf|qfn|qfp|ec|ev|efn|efp)(.*)$/);
+            if (match && match[2]) {
+                prefix = match[2].replace(/^[_\-]/, '') || 'eq';
+            }
         }
+
         if (!fileGroups[prefix]) {
             fileGroups[prefix] = [];
         }
@@ -536,18 +674,26 @@ async function loadBandData(files) {
                     let traceName = file.name;
                     let color = '#333';
                     const nameLower = file.name.toLowerCase();
-                    if (nameLower.startsWith('cb')) {
+                    // Check for conduction band patterns
+                    if (nameLower.includes('cb') || nameLower.includes('ec') || nameLower.includes('conduction')) {
                         traceName = 'Conduction Band';
                         color = '#dc3545';
-                    } else if (nameLower.startsWith('vb')) {
+                    // Check for valence band patterns
+                    } else if (nameLower.includes('vb') || nameLower.includes('ev') || nameLower.includes('valence')) {
                         traceName = 'Valence Band';
                         color = '#007bff';
-                    } else if (nameLower.startsWith('qfn')) {
+                    // Check for electron quasi-Fermi patterns
+                    } else if (nameLower.includes('qfn') || nameLower.includes('efn') || (nameLower.includes('qf') && nameLower.includes('electron'))) {
                         traceName = 'Quasi-Fermi (e)';
                         color = '#28a745';
-                    } else if (nameLower.startsWith('qfp')) {
+                    // Check for hole quasi-Fermi patterns
+                    } else if (nameLower.includes('qfp') || nameLower.includes('efp') || (nameLower.includes('qf') && nameLower.includes('hole'))) {
                         traceName = 'Quasi-Fermi (h)';
                         color = '#fd7e14';
+                    // Generic quasi-Fermi
+                    } else if (nameLower.includes('qf') || nameLower.includes('fermi')) {
+                        traceName = 'Quasi-Fermi';
+                        color = '#17a2b8';
                     }
 
                     traces.push({

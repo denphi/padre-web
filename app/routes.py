@@ -478,27 +478,45 @@ def _parse_padre_output_file(filepath, filename):
 
         # Determine file type based on filename or content
         name_lower = filename.lower()
+        # Remove common extensions for pattern matching
+        name_base = name_lower.replace('.txt', '').replace('.dat', '').replace('.out', '')
 
-        # I-V data files
-        if 'iv' in name_lower or name_lower == 'iv':
+        # I-V data files (iv, iv_forward, current, etc.)
+        if 'iv' in name_base or 'current' in name_base:
             data['type'] = 'iv'
             data = _parse_iv_file(lines, data)
-        # Band diagram files (cb = conduction band, vb = valence band)
-        elif name_lower.startswith('cb') or name_lower.startswith('vb') or 'band' in name_lower:
+        # C-V data files (cv, capacitance)
+        elif 'cv' in name_base or 'capacitance' in name_base:
+            data['type'] = 'cv'
+            data = _parse_iv_file(lines, data)  # Same format as IV
+        # Band diagram files (cb = conduction band, vb = valence band, ec, ev)
+        elif any(pattern in name_base for pattern in ['cb', 'vb', 'ec', 'ev', 'band', 'conduction', 'valence']):
             data['type'] = 'band'
             data = _parse_1d_data_file(lines, data)
-        # Quasi-Fermi level files
-        elif name_lower.startswith('qf'):
+        # Quasi-Fermi level files (qf, qfn, qfp, fermi)
+        elif any(pattern in name_base for pattern in ['qf', 'fermi', 'efn', 'efp']):
             data['type'] = 'qf'
             data = _parse_1d_data_file(lines, data)
         # Mesh file
-        elif 'mesh' in name_lower:
+        elif 'mesh' in name_base or 'grid' in name_base:
             data['type'] = 'mesh'
             data = _parse_mesh_file(lines, data)
-        # Generic 1D plot data
+        # Carrier concentration files
+        elif any(pattern in name_base for pattern in ['electron', 'hole', 'carrier', 'density', 'concentration']):
+            data['type'] = 'carrier'
+            data = _parse_1d_data_file(lines, data)
+        # Electric field or potential files
+        elif any(pattern in name_base for pattern in ['field', 'potential', 'phi', 'psi']):
+            data['type'] = 'field'
+            data = _parse_1d_data_file(lines, data)
+        # Doping profile
+        elif any(pattern in name_base for pattern in ['doping', 'dopant', 'na', 'nd']):
+            data['type'] = 'doping'
+            data = _parse_1d_data_file(lines, data)
+        # Generic 1D plot data - try to parse anything else
         else:
             data = _parse_1d_data_file(lines, data)
-            if data['columns']:
+            if data['values'] and len(data['values']) > 0:
                 data['type'] = '1d'
 
     except Exception as e:
