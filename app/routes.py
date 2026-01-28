@@ -384,18 +384,164 @@ def download_output_file(sim_id, filename):
     try:
         output_dir = os.path.join(current_app.config['OUTPUTS_FOLDER'], sim_id)
         filepath = os.path.join(output_dir, filename)
-        
+
         # Security check: ensure filepath is within output_dir
         if not os.path.abspath(filepath).startswith(os.path.abspath(output_dir)):
             return jsonify({'success': False, 'error': 'Invalid file path'}), 400
-        
+
         if not os.path.exists(filepath):
             return jsonify({'success': False, 'error': 'File not found'}), 404
-        
+
         return send_file(filepath, as_attachment=True, download_name=filename)
-    
+
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@results_bp.route('/<sim_id>/file/<filename>')
+def get_file_content(sim_id, filename):
+    """Get parsed content of an output file for visualization."""
+    try:
+        output_dir = os.path.join(current_app.config['OUTPUTS_FOLDER'], sim_id)
+        filepath = os.path.join(output_dir, filename)
+
+        # Security check
+        if not os.path.abspath(filepath).startswith(os.path.abspath(output_dir)):
+            return jsonify({'success': False, 'error': 'Invalid file path'}), 400
+
+        if not os.path.exists(filepath):
+            return jsonify({'success': False, 'error': 'File not found'}), 404
+
+        # Parse the file based on its type
+        data = _parse_padre_output_file(filepath, filename)
+
+        return jsonify({
+            'success': True,
+            'filename': filename,
+            'data': data
+        }), 200
+
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+def _parse_padre_output_file(filepath, filename):
+    """Parse a PADRE output file and return structured data."""
+    data = {
+        'type': 'unknown',
+        'columns': [],
+        'values': [],
+        'raw': ''
+    }
+
+    try:
+        with open(filepath, 'r') as f:
+            content = f.read()
+            data['raw'] = content
+
+        lines = content.strip().split('\n')
+
+        # Determine file type based on filename or content
+        name_lower = filename.lower()
+
+        # I-V data files
+        if 'iv' in name_lower or name_lower == 'iv':
+            data['type'] = 'iv'
+            data = _parse_iv_file(lines, data)
+        # Band diagram files (cb = conduction band, vb = valence band)
+        elif name_lower.startswith('cb') or name_lower.startswith('vb') or 'band' in name_lower:
+            data['type'] = 'band'
+            data = _parse_1d_data_file(lines, data)
+        # Quasi-Fermi level files
+        elif name_lower.startswith('qf'):
+            data['type'] = 'qf'
+            data = _parse_1d_data_file(lines, data)
+        # Mesh file
+        elif 'mesh' in name_lower:
+            data['type'] = 'mesh'
+            data = _parse_mesh_file(lines, data)
+        # Generic 1D plot data
+        else:
+            data = _parse_1d_data_file(lines, data)
+            if data['columns']:
+                data['type'] = '1d'
+
+    except Exception as e:
+        data['error'] = str(e)
+
+    return data
+
+
+def _parse_iv_file(lines, data):
+    """Parse I-V characteristic file."""
+    values = []
+    for line in lines:
+        line = line.strip()
+        if not line or line.startswith('#') or line.startswith('!'):
+            continue
+        parts = line.split()
+        if len(parts) >= 2:
+            try:
+                row = [float(p) for p in parts]
+                values.append(row)
+            except ValueError:
+                continue
+
+    if values:
+        data['values'] = values
+        # Assume columns: voltage, current (and possibly more)
+        if len(values[0]) >= 2:
+            data['columns'] = ['Voltage (V)', 'Current (A)']
+            if len(values[0]) > 2:
+                data['columns'].extend([f'Column {i+1}' for i in range(2, len(values[0]))])
+
+    return data
+
+
+def _parse_1d_data_file(lines, data):
+    """Parse 1D plot data file (band diagrams, etc.)."""
+    values = []
+    for line in lines:
+        line = line.strip()
+        if not line or line.startswith('#') or line.startswith('!'):
+            continue
+        parts = line.split()
+        if len(parts) >= 2:
+            try:
+                row = [float(p) for p in parts]
+                values.append(row)
+            except ValueError:
+                continue
+
+    if values:
+        data['values'] = values
+        data['columns'] = ['Position (um)', 'Value']
+        if len(values[0]) > 2:
+            data['columns'] = ['Position (um)'] + [f'Value {i}' for i in range(1, len(values[0]))]
+
+    return data
+
+
+def _parse_mesh_file(lines, data):
+    """Parse mesh file."""
+    values = []
+    for line in lines:
+        line = line.strip()
+        if not line or line.startswith('#') or line.startswith('!'):
+            continue
+        parts = line.split()
+        if len(parts) >= 2:
+            try:
+                row = [float(p) for p in parts]
+                values.append(row)
+            except ValueError:
+                continue
+
+    if values:
+        data['values'] = values
+        data['columns'] = ['X (um)', 'Y (um)']
+
+    return data
 
 
 # ============= HELPER FUNCTIONS =============
