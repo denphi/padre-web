@@ -229,6 +229,13 @@ function renderOutputFiles(files) {
             // Only expand the first plottable group
             const isExpanded = isFirst && isPlottable;
 
+            // Add "Plot All" button for plottable categories with multiple files
+            const plotAllBtn = isPlottable && catData.files.length > 1
+                ? `<span class="badge bg-primary ms-auto me-2 plot-all-btn" data-category="${catKey}" title="Plot all ${catData.label}" style="cursor: pointer;">
+                       <i class="fas fa-layer-group"></i> Plot All
+                   </span>`
+                : '';
+
             html += `
                 <div class="accordion-item">
                     <h2 class="accordion-header" id="${headerId}">
@@ -238,6 +245,7 @@ function renderOutputFiles(files) {
                             <i class="${catData.icon} me-2"></i>
                             <span>${catData.label}</span>
                             <span class="badge bg-secondary ms-2">${catData.files.length}</span>
+                            ${plotAllBtn}
                         </button>
                     </h2>
                     <div id="${collapseId}" class="accordion-collapse collapse ${isExpanded ? 'show' : ''}"
@@ -260,13 +268,24 @@ function renderOutputFiles(files) {
     html += '</div>';
     container.innerHTML = html;
 
-    // Add click handlers for plottable files
+    // Add click handlers for plottable files (single file plot)
     container.querySelectorAll('.file-item-plottable').forEach(item => {
         item.addEventListener('click', (e) => {
             e.preventDefault();
             const filename = item.dataset.filename;
             const fileType = item.dataset.filetype;
             onFileClick(filename, fileType);
+        });
+    });
+
+    // Add click handlers for "Plot All" buttons (overlay all files in category)
+    container.querySelectorAll('.plot-all-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation(); // Prevent accordion toggle
+            const category = btn.dataset.category;
+            const files = categories[category].files;
+            onCategoryPlotAll(category, files);
         });
     });
 }
@@ -340,16 +359,11 @@ async function onFileClick(filename, fileType) {
             tab.show();
         }
 
-        // For band diagrams (band/qf), load all related files and overlay them
-        if (fileType === 'band' || fileType === 'qf') {
-            await plotBandDiagramOverlay(filename, fileType);
-        } else {
-            // For other file types, load and plot the single file
-            const result = await apiCall(`/api/results/${simId}/file/${filename}`);
+        // Load and plot the single file
+        const result = await apiCall(`/api/results/${simId}/file/${filename}`);
 
-            if (result.success && result.data) {
-                plotSelectedFile(result.data, filename, fileType);
-            }
+        if (result.success && result.data) {
+            plotSelectedFile(result.data, filename, fileType);
         }
     } catch (error) {
         console.error(`Error loading file ${filename}:`, error);
@@ -357,31 +371,49 @@ async function onFileClick(filename, fileType) {
     }
 }
 
-async function plotBandDiagramOverlay(clickedFilename, fileType) {
-    // Get the bias condition from the clicked filename (eq, fwd, rev, etc.)
-    const biasCondition = extractBiasCondition(clickedFilename);
+async function onCategoryPlotAll(category, files) {
+    try {
+        // Switch to the Plots tab
+        const plotsTab = document.getElementById('plotsTab');
+        if (plotsTab) {
+            const tab = new bootstrap.Tab(plotsTab);
+            tab.show();
+        }
 
-    // Find all band-related files with the same bias condition
-    const relatedFiles = outputFiles.filter(file => {
-        const category = categorizeFile(file.name);
-        if (category !== 'band' && category !== 'qf') return false;
+        // Handle different categories
+        if (category === 'band' || category === 'qf') {
+            await plotAllBandDiagrams(files);
+        } else if (category === 'iv' || category === 'cv') {
+            await plotAllIVCurves(files, category);
+        } else if (category === 'carrier') {
+            await plotAllCarriers(files);
+        } else if (category === 'field') {
+            await plotAllFields(files);
+        } else {
+            // Generic overlay for other categories
+            await plotAllGeneric(files, category);
+        }
+    } catch (error) {
+        console.error(`Error plotting category ${category}:`, error);
+        showAlert(`Failed to plot ${category}`, 'danger');
+    }
+}
 
-        const fileBias = extractBiasCondition(file.name);
-        return fileBias === biasCondition;
+async function plotAllBandDiagrams(files) {
+    // Also include qf files if plotting band diagrams
+    const allBandFiles = outputFiles.filter(file => {
+        const cat = categorizeFile(file.name);
+        return cat === 'band' || cat === 'qf';
     });
 
-    if (relatedFiles.length === 0) {
-        // Fallback: just plot the clicked file
-        const result = await apiCall(`/api/results/${simId}/file/${clickedFilename}`);
-        if (result.success && result.data) {
-            plotSelectedFile(result.data, clickedFilename, fileType);
-        }
-        return;
-    }
-
-    // Load data for all related files
     const traces = [];
-    for (const file of relatedFiles) {
+    const biasColors = {
+        'eq': { cb: '#dc3545', vb: '#007bff', qfn: '#28a745', qfp: '#fd7e14' },
+        'fwd': { cb: '#c82333', vb: '#0056b3', qfn: '#1e7e34', qfp: '#e06400' },
+        'rev': { cb: '#a71d2a', vb: '#004494', qfn: '#155724', qfp: '#c55a00' }
+    };
+
+    for (const file of allBandFiles) {
         try {
             const result = await apiCall(`/api/results/${simId}/file/${file.name}`);
             if (result.success && result.data && result.data.values && result.data.values.length > 0) {
@@ -389,15 +421,20 @@ async function plotBandDiagramOverlay(clickedFilename, fileType) {
                 const positions = values.map(row => row[0]);
                 const energies = values.map(row => row[1]);
 
-                // Determine trace name and color based on variable or filename
-                const { traceName, color } = getBandTraceStyle(result.data.variable, file.name);
+                const biasCondition = extractBiasCondition(file.name);
+                const { traceName, colorKey } = getBandTraceInfo(result.data.variable, file.name);
+                const colors = biasColors[biasCondition] || biasColors['eq'];
+                const color = colors[colorKey] || '#333';
+
+                // Add bias condition to trace name if not equilibrium
+                const fullTraceName = biasCondition === 'eq' ? traceName : `${traceName} (${biasCondition})`;
 
                 traces.push({
                     x: positions,
                     y: energies,
                     type: 'scatter',
                     mode: 'lines',
-                    name: traceName,
+                    name: fullTraceName,
                     line: { color: color, width: 2 }
                 });
             }
@@ -407,15 +444,218 @@ async function plotBandDiagramOverlay(clickedFilename, fileType) {
     }
 
     if (traces.length > 0) {
-        const title = biasCondition === 'eq' ? 'Band Diagram (Equilibrium)' :
-                     biasCondition === 'fwd' ? 'Band Diagram (Forward Bias)' :
-                     biasCondition === 'rev' ? 'Band Diagram (Reverse Bias)' :
-                     `Band Diagram (${biasCondition})`;
+        const layout = {
+            title: 'Band Diagram (All Conditions)',
+            xaxis: { title: 'Position (μm)', gridcolor: '#e0e0e0' },
+            yaxis: { title: 'Energy (eV)', gridcolor: '#e0e0e0' },
+            plot_bgcolor: '#fafafa',
+            paper_bgcolor: '#ffffff',
+            margin: { t: 50, r: 30, b: 50, l: 70 },
+            legend: { x: 1, xanchor: 'right', y: 1 },
+            showlegend: true
+        };
+
+        const containerId = 'plotsVisualization';
+        document.getElementById(containerId).innerHTML = '<div id="mainPlotArea" style="height: 450px;"></div>';
+        Plotly.newPlot('mainPlotArea', traces, layout, { responsive: true });
+    }
+}
+
+async function plotAllIVCurves(files, category) {
+    const traces = [];
+    const colors = ['#007bff', '#dc3545', '#28a745', '#fd7e14', '#6f42c1', '#17a2b8'];
+    let colorIndex = 0;
+
+    for (const file of files) {
+        try {
+            const result = await apiCall(`/api/results/${simId}/file/${file.name}`);
+            if (result.success && result.data && result.data.values && result.data.values.length > 0) {
+                const values = result.data.values;
+                const x = values.map(row => row[0]);
+                const y = values.map(row => row[1]);
+
+                traces.push({
+                    x: x,
+                    y: y,
+                    type: 'scatter',
+                    mode: 'lines+markers',
+                    name: file.name,
+                    line: { color: colors[colorIndex % colors.length], width: 2 },
+                    marker: { size: 4 }
+                });
+                colorIndex++;
+            }
+        } catch (error) {
+            console.error(`Error loading IV file ${file.name}:`, error);
+        }
+    }
+
+    if (traces.length > 0) {
+        const title = category === 'cv' ? 'C-V Characteristics' : 'I-V Characteristics';
+        const yLabel = category === 'cv' ? 'Capacitance (F)' : 'Current (A)';
 
         const layout = {
             title: title,
+            xaxis: { title: 'Voltage (V)', gridcolor: '#e0e0e0' },
+            yaxis: { title: yLabel, gridcolor: '#e0e0e0', exponentformat: 'e' },
+            plot_bgcolor: '#fafafa',
+            paper_bgcolor: '#ffffff',
+            margin: { t: 50, r: 30, b: 50, l: 70 },
+            legend: { x: 1, xanchor: 'right', y: 1 },
+            showlegend: true
+        };
+
+        const containerId = 'plotsVisualization';
+        document.getElementById(containerId).innerHTML = '<div id="mainPlotArea" style="height: 450px;"></div>';
+        Plotly.newPlot('mainPlotArea', traces, layout, { responsive: true });
+    }
+}
+
+async function plotAllCarriers(files) {
+    const traces = [];
+
+    for (const file of files) {
+        try {
+            const result = await apiCall(`/api/results/${simId}/file/${file.name}`);
+            if (result.success && result.data && result.data.values && result.data.values.length > 0) {
+                const values = result.data.values;
+                const x = values.map(row => row[0]);
+                const y = values.map(row => row[1]);
+
+                let traceName = file.name;
+                let color = '#6f42c1';
+                const variable = result.data.variable || '';
+
+                if (variable === 'electrons' || file.name.toLowerCase().includes('ele')) {
+                    traceName = 'Electrons';
+                    color = '#007bff';
+                } else if (variable === 'holes' || file.name.toLowerCase().includes('hole')) {
+                    traceName = 'Holes';
+                    color = '#dc3545';
+                }
+
+                traces.push({
+                    x: x,
+                    y: y,
+                    type: 'scatter',
+                    mode: 'lines',
+                    name: traceName,
+                    line: { color: color, width: 2 }
+                });
+            }
+        } catch (error) {
+            console.error(`Error loading carrier file ${file.name}:`, error);
+        }
+    }
+
+    if (traces.length > 0) {
+        const layout = {
+            title: 'Carrier Concentrations',
             xaxis: { title: 'Position (μm)', gridcolor: '#e0e0e0' },
-            yaxis: { title: 'Energy (eV)', gridcolor: '#e0e0e0' },
+            yaxis: { title: 'Concentration (/cm³)', gridcolor: '#e0e0e0', type: 'log', exponentformat: 'e' },
+            plot_bgcolor: '#fafafa',
+            paper_bgcolor: '#ffffff',
+            margin: { t: 50, r: 30, b: 50, l: 70 },
+            legend: { x: 1, xanchor: 'right', y: 1 },
+            showlegend: true
+        };
+
+        const containerId = 'plotsVisualization';
+        document.getElementById(containerId).innerHTML = '<div id="mainPlotArea" style="height: 450px;"></div>';
+        Plotly.newPlot('mainPlotArea', traces, layout, { responsive: true });
+    }
+}
+
+async function plotAllFields(files) {
+    const traces = [];
+    const colors = ['#fd7e14', '#20c997', '#6f42c1', '#17a2b8'];
+    let colorIndex = 0;
+
+    for (const file of files) {
+        try {
+            const result = await apiCall(`/api/results/${simId}/file/${file.name}`);
+            if (result.success && result.data && result.data.values && result.data.values.length > 0) {
+                const values = result.data.values;
+                const x = values.map(row => row[0]);
+                const y = values.map(row => row[1]);
+
+                let traceName = file.name;
+                const variable = result.data.variable || '';
+
+                if (variable === 'potential') {
+                    traceName = 'Potential';
+                } else if (variable === 'e_field') {
+                    traceName = 'Electric Field';
+                } else if (variable === 'doping') {
+                    traceName = 'Doping';
+                }
+
+                traces.push({
+                    x: x,
+                    y: y,
+                    type: 'scatter',
+                    mode: 'lines',
+                    name: traceName,
+                    line: { color: colors[colorIndex % colors.length], width: 2 }
+                });
+                colorIndex++;
+            }
+        } catch (error) {
+            console.error(`Error loading field file ${file.name}:`, error);
+        }
+    }
+
+    if (traces.length > 0) {
+        const layout = {
+            title: 'Electric Field / Potential',
+            xaxis: { title: 'Position (μm)', gridcolor: '#e0e0e0' },
+            yaxis: { title: 'Value', gridcolor: '#e0e0e0', exponentformat: 'e' },
+            plot_bgcolor: '#fafafa',
+            paper_bgcolor: '#ffffff',
+            margin: { t: 50, r: 30, b: 50, l: 70 },
+            legend: { x: 1, xanchor: 'right', y: 1 },
+            showlegend: true
+        };
+
+        const containerId = 'plotsVisualization';
+        document.getElementById(containerId).innerHTML = '<div id="mainPlotArea" style="height: 450px;"></div>';
+        Plotly.newPlot('mainPlotArea', traces, layout, { responsive: true });
+    }
+}
+
+async function plotAllGeneric(files, category) {
+    const traces = [];
+    const colors = ['#007bff', '#dc3545', '#28a745', '#fd7e14', '#6f42c1', '#17a2b8'];
+    let colorIndex = 0;
+
+    for (const file of files) {
+        try {
+            const result = await apiCall(`/api/results/${simId}/file/${file.name}`);
+            if (result.success && result.data && result.data.values && result.data.values.length > 0) {
+                const values = result.data.values;
+                const x = values.map(row => row[0]);
+                const y = values.map(row => row[1]);
+
+                traces.push({
+                    x: x,
+                    y: y,
+                    type: 'scatter',
+                    mode: 'lines',
+                    name: file.name,
+                    line: { color: colors[colorIndex % colors.length], width: 2 }
+                });
+                colorIndex++;
+            }
+        } catch (error) {
+            console.error(`Error loading file ${file.name}:`, error);
+        }
+    }
+
+    if (traces.length > 0) {
+        const layout = {
+            title: category.charAt(0).toUpperCase() + category.slice(1),
+            xaxis: { title: 'X', gridcolor: '#e0e0e0' },
+            yaxis: { title: 'Y', gridcolor: '#e0e0e0', exponentformat: 'e' },
             plot_bgcolor: '#fafafa',
             paper_bgcolor: '#ffffff',
             margin: { t: 50, r: 30, b: 50, l: 70 },
@@ -446,41 +686,37 @@ function extractBiasCondition(filename) {
     return 'eq';
 }
 
-function getBandTraceStyle(variable, filename) {
-    let traceName = filename;
-    let color = '#333';
-
-    // Priority: use variable from backend
+function getBandTraceInfo(variable, filename) {
+    // Returns traceName and colorKey for band diagrams
     if (variable === 'band_con') {
-        return { traceName: 'Conduction Band (Ec)', color: '#dc3545' };
+        return { traceName: 'Ec', colorKey: 'cb' };
     } else if (variable === 'band_val') {
-        return { traceName: 'Valence Band (Ev)', color: '#007bff' };
+        return { traceName: 'Ev', colorKey: 'vb' };
     } else if (variable === 'qfn') {
-        return { traceName: 'Electron Quasi-Fermi (Efn)', color: '#28a745' };
+        return { traceName: 'Efn', colorKey: 'qfn' };
     } else if (variable === 'qfp') {
-        return { traceName: 'Hole Quasi-Fermi (Efp)', color: '#fd7e14' };
+        return { traceName: 'Efp', colorKey: 'qfp' };
     }
 
     // Fallback to filename detection
     const nameLower = filename.toLowerCase();
     if (nameLower.includes('cb') || nameLower.includes('ec') || nameLower.includes('conduction')) {
-        traceName = 'Conduction Band (Ec)';
-        color = '#dc3545';
+        return { traceName: 'Ec', colorKey: 'cb' };
     } else if (nameLower.includes('vb') || nameLower.includes('ev') || nameLower.includes('valence')) {
-        traceName = 'Valence Band (Ev)';
-        color = '#007bff';
+        return { traceName: 'Ev', colorKey: 'vb' };
     } else if (nameLower.includes('qfn') || nameLower.includes('efn')) {
-        traceName = 'Electron Quasi-Fermi (Efn)';
-        color = '#28a745';
+        return { traceName: 'Efn', colorKey: 'qfn' };
     } else if (nameLower.includes('qfp') || nameLower.includes('efp')) {
-        traceName = 'Hole Quasi-Fermi (Efp)';
-        color = '#fd7e14';
-    } else if (nameLower.includes('qf') || nameLower.includes('fermi')) {
-        traceName = 'Quasi-Fermi Level';
-        color = '#17a2b8';
+        return { traceName: 'Efp', colorKey: 'qfp' };
     }
 
-    return { traceName, color };
+    return { traceName: filename, colorKey: 'cb' };
+}
+
+function getBandTraceStyle(variable, filename) {
+    const info = getBandTraceInfo(variable, filename);
+    const colors = { cb: '#dc3545', vb: '#007bff', qfn: '#28a745', qfp: '#fd7e14' };
+    return { traceName: info.traceName, color: colors[info.colorKey] || '#333' };
 }
 
 function plotSelectedFile(data, filename, fileType) {
