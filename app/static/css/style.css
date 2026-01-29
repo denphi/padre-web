@@ -685,3 +685,77 @@ code {
     background-color: #f8f9fa;
     border-top: 1px solid #dee2e6;
 }
+
+/* ============================================
+   Output Files Accordion
+   ============================================ */
+
+#outputFilesAccordion {
+    border: none;
+}
+
+#outputFilesAccordion .accordion-item {
+    border: none;
+    border-bottom: 1px solid #e9ecef;
+}
+
+#outputFilesAccordion .accordion-item:last-child {
+    border-bottom: none;
+}
+
+#outputFilesAccordion .accordion-button {
+    font-size: 0.85rem;
+    font-weight: 600;
+    background-color: #f8f9fa;
+    padding: 0.6rem 1rem;
+    box-shadow: none;
+}
+
+#outputFilesAccordion .accordion-button:not(.collapsed) {
+    background-color: #e7f1ff;
+    color: var(--primary-color);
+}
+
+#outputFilesAccordion .accordion-button:focus {
+    box-shadow: none;
+    border-color: transparent;
+}
+
+#outputFilesAccordion .accordion-button .badge {
+    font-size: 0.65rem;
+    padding: 0.25rem 0.5rem;
+}
+
+#outputFilesAccordion .accordion-body {
+    padding: 0;
+}
+
+/* Plottable file items */
+.file-item-plottable {
+    border-left: 3px solid transparent;
+    transition: all 0.2s ease;
+}
+
+.file-item-plottable:hover {
+    border-left-color: var(--primary-color);
+    background-color: #f0f7ff !important;
+}
+
+.file-item-plottable .badge {
+    opacity: 0.8;
+    transition: opacity 0.2s ease;
+}
+
+.file-item-plottable:hover .badge {
+    opacity: 1;
+}
+
+/* Non-plottable file items (download only) */
+.list-group-item:not(.file-item-plottable) {
+    cursor: default;
+}
+
+.list-group-item:not(.file-item-plottable):hover {
+    padding-left: 1rem;
+    background-color: #f8f9fa;
+}

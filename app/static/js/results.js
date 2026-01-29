@@ -200,17 +200,20 @@ function renderOutputFiles(files) {
 
     const basePath = getBasePath();
 
+    // Categories that support plotting (plottable groups)
+    const plottableCategories = ['iv', 'cv', 'band', 'qf', 'mesh', 'carrier', 'field'];
+
     // Categorize files using the helper function
     const categories = {
-        iv: { label: 'I-V Data', files: [] },
-        cv: { label: 'C-V Data', files: [] },
-        band: { label: 'Band Diagrams', files: [] },
-        qf: { label: 'Quasi-Fermi Levels', files: [] },
-        mesh: { label: 'Mesh', files: [] },
-        carrier: { label: 'Carrier Density', files: [] },
-        field: { label: 'Electric Field/Potential', files: [] },
-        deck: { label: 'Input Files', files: [] },
-        other: { label: 'Other', files: [] }
+        iv: { label: 'I-V Data', files: [], icon: 'fas fa-chart-line' },
+        cv: { label: 'C-V Data', files: [], icon: 'fas fa-chart-area' },
+        band: { label: 'Band Diagrams', files: [], icon: 'fas fa-wave-square' },
+        qf: { label: 'Quasi-Fermi Levels', files: [], icon: 'fas fa-level-up-alt' },
+        mesh: { label: 'Mesh', files: [], icon: 'fas fa-th' },
+        carrier: { label: 'Carrier Density', files: [], icon: 'fas fa-atom' },
+        field: { label: 'Electric Field/Potential', files: [], icon: 'fas fa-bolt' },
+        deck: { label: 'Input Files', files: [], icon: 'fas fa-file-code' },
+        other: { label: 'Other Files', files: [], icon: 'fas fa-file' }
     };
 
     for (const file of files) {
@@ -218,20 +221,51 @@ function renderOutputFiles(files) {
         categories[category].files.push(file);
     }
 
-    let html = '';
+    // Build accordion HTML
+    let html = '<div class="accordion" id="outputFilesAccordion">';
+    let isFirst = true;
 
-    // Render each category that has files
     for (const [catKey, catData] of Object.entries(categories)) {
         if (catData.files.length > 0) {
-            html += `<div class="list-group-item bg-light fw-bold small py-2">${catData.label}</div>`;
-            html += catData.files.map(file => renderFileItem(file, catKey, basePath)).join('');
+            const isPlottable = plottableCategories.includes(catKey);
+            const collapseId = `collapse-${catKey}`;
+            const headerId = `header-${catKey}`;
+            // Only expand the first plottable group
+            const isExpanded = isFirst && isPlottable;
+
+            html += `
+                <div class="accordion-item">
+                    <h2 class="accordion-header" id="${headerId}">
+                        <button class="accordion-button ${isExpanded ? '' : 'collapsed'} py-2" type="button"
+                                data-bs-toggle="collapse" data-bs-target="#${collapseId}"
+                                aria-expanded="${isExpanded}" aria-controls="${collapseId}">
+                            <i class="${catData.icon} me-2"></i>
+                            <span>${catData.label}</span>
+                            <span class="badge bg-secondary ms-2">${catData.files.length}</span>
+                        </button>
+                    </h2>
+                    <div id="${collapseId}" class="accordion-collapse collapse ${isExpanded ? 'show' : ''}"
+                         aria-labelledby="${headerId}" data-bs-parent="#outputFilesAccordion">
+                        <div class="accordion-body p-0">
+                            <div class="list-group list-group-flush">
+                                ${catData.files.map(file => renderFileItem(file, catKey, basePath, isPlottable)).join('')}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            if (isPlottable) {
+                isFirst = false;
+            }
         }
     }
 
+    html += '</div>';
     container.innerHTML = html;
 
-    // Add click handlers
-    container.querySelectorAll('.file-item').forEach(item => {
+    // Add click handlers for plottable files
+    container.querySelectorAll('.file-item-plottable').forEach(item => {
         item.addEventListener('click', (e) => {
             e.preventDefault();
             const filename = item.dataset.filename;
@@ -241,29 +275,50 @@ function renderOutputFiles(files) {
     });
 }
 
-function renderFileItem(file, fileType, basePath) {
+function renderFileItem(file, fileType, basePath, isPlottable) {
     const icon = getFileIcon(fileType);
-    return `
-        <a href="#" class="list-group-item list-group-item-action file-item d-flex justify-content-between align-items-center py-2"
-           data-filename="${file.name}" data-filetype="${fileType}">
-            <div class="d-flex align-items-center">
-                <i class="${icon} me-2 text-muted"></i>
-                <div>
-                    <div class="small">${file.name}</div>
-                    <small class="text-muted">${formatFileSize(file.size)}</small>
+
+    if (isPlottable) {
+        // Plottable file: clickable with plot icon and download button
+        return `
+            <a href="#" class="list-group-item list-group-item-action file-item-plottable d-flex justify-content-between align-items-center py-2"
+               data-filename="${file.name}" data-filetype="${fileType}">
+                <div class="d-flex align-items-center">
+                    <i class="${icon} me-2 text-muted"></i>
+                    <div>
+                        <div class="small">${file.name}</div>
+                        <small class="text-muted">${formatFileSize(file.size)}</small>
+                    </div>
                 </div>
-            </div>
-            <div class="d-flex align-items-center">
-                <span class="badge bg-secondary me-2" title="Click to plot">
-                    <i class="fas fa-chart-line"></i>
-                </span>
+                <div class="d-flex align-items-center">
+                    <span class="badge bg-primary me-2" title="Click to plot">
+                        <i class="fas fa-chart-line"></i>
+                    </span>
+                    <a href="${basePath}/api/results/${simId}/download/${file.name}"
+                       class="btn btn-sm btn-outline-secondary" onclick="event.stopPropagation();" title="Download">
+                        <i class="fas fa-download"></i>
+                    </a>
+                </div>
+            </a>
+        `;
+    } else {
+        // Non-plottable file: only download option, not clickable
+        return `
+            <div class="list-group-item d-flex justify-content-between align-items-center py-2">
+                <div class="d-flex align-items-center">
+                    <i class="${icon} me-2 text-muted"></i>
+                    <div>
+                        <div class="small">${file.name}</div>
+                        <small class="text-muted">${formatFileSize(file.size)}</small>
+                    </div>
+                </div>
                 <a href="${basePath}/api/results/${simId}/download/${file.name}"
-                   class="btn btn-sm btn-outline-secondary" onclick="event.stopPropagation();" title="Download">
+                   class="btn btn-sm btn-outline-secondary" title="Download">
                     <i class="fas fa-download"></i>
                 </a>
             </div>
-        </a>
-    `;
+        `;
+    }
 }
 
 function getFileIcon(fileType) {

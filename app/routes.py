@@ -450,6 +450,15 @@ def get_file_content(sim_id, filename):
         # Parse the file based on its type
         data = _parse_padre_output_file(filepath, filename)
 
+        # Add debug info
+        data['debug'] = {
+            'filepath': filepath,
+            'file_exists': os.path.exists(filepath),
+            'file_size': os.path.getsize(filepath) if os.path.exists(filepath) else 0,
+            'values_count': len(data.get('values', [])),
+            'raw_length': len(data.get('raw', ''))
+        }
+
         return jsonify({
             'success': True,
             'filename': filename,
@@ -461,7 +470,16 @@ def get_file_content(sim_id, filename):
 
 
 def _parse_padre_output_file(filepath, filename):
-    """Parse a PADRE output file using the nanohubpadre library."""
+    """Parse a PADRE output file.
+
+    Uses manual parsing that matches the format expected by nanohubpadre library.
+    PADRE ASCII files have:
+    - Comment lines starting with # or $ or !
+    - Data lines with space-separated numeric values
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+
     data = {
         'type': 'unknown',
         'columns': [],
@@ -476,90 +494,81 @@ def _parse_padre_output_file(filepath, filename):
             content = f.read()
             data['raw'] = content
 
-        # Try to use nanohubpadre library for parsing
-        try:
-            from app.simulation_runner import PADRE_AVAILABLE
-            if PADRE_AVAILABLE:
-                from nanohubpadre import OutputManager, OutputType, OutputEntry
-                from nanohubpadre.outputs import PlotData
-                import numpy as np
+        # Log first few lines for debugging
+        first_lines = content[:500] if len(content) > 500 else content
+        logger.info(f"Parsing file {filename}, first content: {repr(first_lines[:200])}")
 
-                # Get the output directory and filename
-                output_dir = os.path.dirname(filepath)
-                name_base = os.path.splitext(filename)[0]
-
-                # Create an OutputManager for this directory
-                output_mgr = OutputManager(working_dir=output_dir)
-
-                # Determine output type based on filename patterns
-                output_type = _determine_output_type(name_base)
-                variable = _determine_variable(name_base)
-
-                # Register this output
-                output_mgr.register(name_base, output_type, variable=variable)
-
-                # Load the data
-                output_mgr.load_all()
-
-                # Get the parsed data
-                parsed_data = output_mgr.get(name_base)
-
-                if parsed_data is not None:
-                    if isinstance(parsed_data, PlotData):
-                        # Convert PlotData to our format
-                        data['type'] = _output_type_to_string(output_type)
-                        data['variable'] = parsed_data.variable or variable
-                        data['columns'] = [parsed_data.x_label, parsed_data.y_label or parsed_data.variable]
-                        # Convert numpy arrays to list of [x, y] pairs
-                        data['values'] = [[float(x), float(y)] for x, y in zip(parsed_data.x, parsed_data.y)]
-                        return data
-                    elif hasattr(parsed_data, 'voltage') and hasattr(parsed_data, 'current'):
-                        # IVData object
-                        data['type'] = 'iv'
-                        data['variable'] = 'iv'
-                        data['columns'] = ['Voltage (V)', 'Current (A)']
-                        data['values'] = [[float(v), float(i)] for v, i in zip(parsed_data.voltage, parsed_data.current)]
-                        return data
-        except Exception as lib_error:
-            # Fall back to manual parsing
-            print(f"Library parsing failed: {lib_error}, falling back to manual parsing")
-            pass
-
-        # Fallback: Manual parsing
+        # Always use manual parsing (works regardless of library availability)
+        # This matches the format used by nanohubpadre library
         lines = content.strip().split('\n')
         name_lower = filename.lower()
         name_base = name_lower.replace('.txt', '').replace('.dat', '').replace('.out', '').replace('.log', '')
 
         # Use pattern matching for file type
-        if name_base == 'iv' or name_base.endswith('_iv') or name_base.startswith('iv_'):
+        # PADRE uses naming conventions like: vbeq, cbeq, cbfwd, vbfwd, qfnfwd, qfpfwd, mesh, iv
+        if name_base == 'iv' or name_base.endswith('_iv') or name_base.startswith('iv_') or 'iv' in name_base:
             data['type'] = 'iv'
             data['variable'] = 'iv'
             data = _parse_iv_file(lines, data)
-        elif name_base == 'cv' or name_base.endswith('_cv') or name_base.startswith('cv_'):
+        elif name_base == 'cv' or name_base.endswith('_cv') or name_base.startswith('cv_') or 'cv' in name_base:
             data['type'] = 'cv'
             data['variable'] = 'cv'
             data = _parse_iv_file(lines, data)
-        elif name_base.startswith('vb') or name_base.startswith('valence'):
+        elif name_base.startswith('vb') or name_base.startswith('vband') or name_base.startswith('ev') or name_base.startswith('valence'):
+            # Valence band: vbeq, vbfwd, vband, ev, valence
             data['type'] = 'band'
             data['variable'] = 'band_val'
             data = _parse_1d_plot_file(lines, data)
             data['columns'] = ['Position (μm)', 'Energy (eV)']
-        elif name_base.startswith('cb') or name_base.startswith('conduction'):
+        elif name_base.startswith('cb') or name_base.startswith('cband') or name_base.startswith('ec') or name_base.startswith('conduction'):
+            # Conduction band: cbeq, cbfwd, cband, ec, conduction
             data['type'] = 'band'
             data['variable'] = 'band_con'
             data = _parse_1d_plot_file(lines, data)
             data['columns'] = ['Position (μm)', 'Energy (eV)']
         elif name_base.startswith('qfn') or name_base.startswith('efn'):
+            # Electron quasi-Fermi level
             data['type'] = 'qf'
             data['variable'] = 'qfn'
             data = _parse_1d_plot_file(lines, data)
             data['columns'] = ['Position (μm)', 'Energy (eV)']
         elif name_base.startswith('qfp') or name_base.startswith('efp'):
+            # Hole quasi-Fermi level
             data['type'] = 'qf'
             data['variable'] = 'qfp'
             data = _parse_1d_plot_file(lines, data)
             data['columns'] = ['Position (μm)', 'Energy (eV)']
-        elif name_base == 'mesh' or name_base.endswith('.pg'):
+        elif name_base.startswith('ele') or 'electron' in name_base:
+            # Electron concentration
+            data['type'] = 'carrier'
+            data['variable'] = 'electrons'
+            data = _parse_1d_plot_file(lines, data)
+            data['columns'] = ['Position (μm)', 'Concentration (/cm³)']
+        elif name_base.startswith('hole'):
+            # Hole concentration
+            data['type'] = 'carrier'
+            data['variable'] = 'holes'
+            data = _parse_1d_plot_file(lines, data)
+            data['columns'] = ['Position (μm)', 'Concentration (/cm³)']
+        elif name_base.startswith('pot') or name_base.startswith('phi') or name_base.startswith('psi'):
+            # Electrostatic potential
+            data['type'] = 'field'
+            data['variable'] = 'potential'
+            data = _parse_1d_plot_file(lines, data)
+            data['columns'] = ['Position (μm)', 'Potential (V)']
+        elif name_base.startswith('dop') or 'doping' in name_base:
+            # Doping profile
+            data['type'] = 'field'
+            data['variable'] = 'doping'
+            data = _parse_1d_plot_file(lines, data)
+            data['columns'] = ['Position (μm)', 'Concentration (/cm³)']
+        elif 'field' in name_base or name_base.startswith('efield'):
+            # Electric field
+            data['type'] = 'field'
+            data['variable'] = 'e_field'
+            data = _parse_1d_plot_file(lines, data)
+            data['columns'] = ['Position (μm)', 'Field (V/cm)']
+        elif name_base == 'mesh' or name_base.endswith('.pg') or 'mesh' in name_base:
             data['type'] = 'mesh'
             data['variable'] = 'mesh'
             data = _parse_mesh_file(lines, data)
@@ -572,32 +581,16 @@ def _parse_padre_output_file(filepath, filename):
             data['variable'] = 'deck'
             data['values'] = []
         else:
-            # Try generic 1D plot parsing
+            # Try generic 1D plot parsing for any other file
             data = _parse_1d_plot_file(lines, data)
             if data['values'] and len(data['values']) > 0:
                 data['type'] = '1d'
-                data['variable'] = 'unknown'
+                data['variable'] = _determine_variable(name_base) or 'unknown'
 
     except Exception as e:
         data['error'] = str(e)
 
     return data
-
-
-def _determine_output_type(name_base):
-    """Determine OutputType from filename."""
-    from nanohubpadre import OutputType
-
-    name_lower = name_base.lower()
-
-    if name_lower == 'iv' or 'iv' in name_lower:
-        return OutputType.IV_DATA
-    elif name_lower == 'mesh' or name_lower.endswith('.pg'):
-        return OutputType.MESH
-    elif name_lower in ['eq', 'fwd', 'rev'] or any(name_lower.endswith(s) for s in ['_eq', '_fwd', '_rev']):
-        return OutputType.SOLUTION
-    else:
-        return OutputType.PLOT_1D
 
 
 def _determine_variable(name_base):
@@ -624,20 +617,6 @@ def _determine_variable(name_base):
         return 'doping'
     else:
         return ''
-
-
-def _output_type_to_string(output_type):
-    """Convert OutputType enum to string for frontend."""
-    from nanohubpadre import OutputType
-
-    mapping = {
-        OutputType.IV_DATA: 'iv',
-        OutputType.MESH: 'mesh',
-        OutputType.SOLUTION: 'solution',
-        OutputType.PLOT_1D: '1d',
-        OutputType.PLOT_2D: '2d',
-    }
-    return mapping.get(output_type, 'unknown')
 
 
 def _parse_iv_file(lines, data):
