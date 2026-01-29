@@ -205,6 +205,7 @@ function renderOutputFiles(files) {
         iv: { label: 'I-V Data', files: [] },
         cv: { label: 'C-V Data', files: [] },
         band: { label: 'Band Diagrams', files: [] },
+        qf: { label: 'Quasi-Fermi Levels', files: [] },
         mesh: { label: 'Mesh', files: [] },
         carrier: { label: 'Carrier Density', files: [] },
         field: { label: 'Electric Field/Potential', files: [] },
@@ -270,6 +271,7 @@ function getFileIcon(fileType) {
         case 'iv': return 'fas fa-chart-line';
         case 'cv': return 'fas fa-chart-area';
         case 'band': return 'fas fa-wave-square';
+        case 'qf': return 'fas fa-level-up-alt';
         case 'mesh': return 'fas fa-th';
         case 'carrier': return 'fas fa-atom';
         case 'field': return 'fas fa-bolt';
