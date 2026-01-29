@@ -722,19 +722,19 @@ code {
     padding: 0.25rem 0.5rem;
 }
 
-#outputFilesAccordion .accordion-button .plot-all-btn {
-    font-size: 0.7rem;
-    padding: 0.3rem 0.6rem;
-    transition: all 0.2s ease;
-}
-
-#outputFilesAccordion .accordion-button .plot-all-btn:hover {
-    background-color: #0056b3 !important;
-    transform: scale(1.05);
-}
-
 #outputFilesAccordion .accordion-body {
     padding: 0;
+}
+
+/* Plot All item inside accordion */
+.plot-all-item {
+    background-color: #f0f7ff !important;
+    border-left: 3px solid var(--primary-color) !important;
+    font-size: 0.85rem;
+}
+
+.plot-all-item:hover {
+    background-color: #e0efff !important;
 }
 
 /* Plottable file items */
