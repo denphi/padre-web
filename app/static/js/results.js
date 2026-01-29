@@ -31,10 +31,6 @@ function setupCollapsibles() {
 }
 
 function setupEventHandlers() {
-    document.getElementById('closeSelectedPlot').addEventListener('click', () => {
-        document.getElementById('selectedFilePlotCard').style.display = 'none';
-    });
-
     document.getElementById('copyDeckBtn').addEventListener('click', () => {
         if (currentDeckContent) {
             copyToClipboard(currentDeckContent);
@@ -337,18 +333,23 @@ function getFileIcon(fileType) {
 
 async function onFileClick(filename, fileType) {
     try {
-        const result = await apiCall(`/api/results/${simId}/file/${filename}`);
+        // Switch to the Plots tab
+        const plotsTab = document.getElementById('plotsTab');
+        if (plotsTab) {
+            const tab = new bootstrap.Tab(plotsTab);
+            tab.show();
+        }
 
-        if (result.success && result.data) {
-            // Show the selected file plot card
-            document.getElementById('selectedFilePlotCard').style.display = 'block';
-            document.getElementById('selectedFileName').textContent = filename;
+        // For band diagrams (band/qf), load all related files and overlay them
+        if (fileType === 'band' || fileType === 'qf') {
+            await plotBandDiagramOverlay(filename, fileType);
+        } else {
+            // For other file types, load and plot the single file
+            const result = await apiCall(`/api/results/${simId}/file/${filename}`);
 
-            // Plot based on file type
-            plotSelectedFile(result.data, filename, fileType);
-
-            // Scroll to the plot
-            document.getElementById('selectedFilePlotCard').scrollIntoView({ behavior: 'smooth' });
+            if (result.success && result.data) {
+                plotSelectedFile(result.data, filename, fileType);
+            }
         }
     } catch (error) {
         console.error(`Error loading file ${filename}:`, error);
@@ -356,11 +357,140 @@ async function onFileClick(filename, fileType) {
     }
 }
 
+async function plotBandDiagramOverlay(clickedFilename, fileType) {
+    // Get the bias condition from the clicked filename (eq, fwd, rev, etc.)
+    const biasCondition = extractBiasCondition(clickedFilename);
+
+    // Find all band-related files with the same bias condition
+    const relatedFiles = outputFiles.filter(file => {
+        const category = categorizeFile(file.name);
+        if (category !== 'band' && category !== 'qf') return false;
+
+        const fileBias = extractBiasCondition(file.name);
+        return fileBias === biasCondition;
+    });
+
+    if (relatedFiles.length === 0) {
+        // Fallback: just plot the clicked file
+        const result = await apiCall(`/api/results/${simId}/file/${clickedFilename}`);
+        if (result.success && result.data) {
+            plotSelectedFile(result.data, clickedFilename, fileType);
+        }
+        return;
+    }
+
+    // Load data for all related files
+    const traces = [];
+    for (const file of relatedFiles) {
+        try {
+            const result = await apiCall(`/api/results/${simId}/file/${file.name}`);
+            if (result.success && result.data && result.data.values && result.data.values.length > 0) {
+                const values = result.data.values;
+                const positions = values.map(row => row[0]);
+                const energies = values.map(row => row[1]);
+
+                // Determine trace name and color based on variable or filename
+                const { traceName, color } = getBandTraceStyle(result.data.variable, file.name);
+
+                traces.push({
+                    x: positions,
+                    y: energies,
+                    type: 'scatter',
+                    mode: 'lines',
+                    name: traceName,
+                    line: { color: color, width: 2 }
+                });
+            }
+        } catch (error) {
+            console.error(`Error loading band file ${file.name}:`, error);
+        }
+    }
+
+    if (traces.length > 0) {
+        const title = biasCondition === 'eq' ? 'Band Diagram (Equilibrium)' :
+                     biasCondition === 'fwd' ? 'Band Diagram (Forward Bias)' :
+                     biasCondition === 'rev' ? 'Band Diagram (Reverse Bias)' :
+                     `Band Diagram (${biasCondition})`;
+
+        const layout = {
+            title: title,
+            xaxis: { title: 'Position (μm)', gridcolor: '#e0e0e0' },
+            yaxis: { title: 'Energy (eV)', gridcolor: '#e0e0e0' },
+            plot_bgcolor: '#fafafa',
+            paper_bgcolor: '#ffffff',
+            margin: { t: 50, r: 30, b: 50, l: 70 },
+            legend: { x: 1, xanchor: 'right', y: 1 },
+            showlegend: true
+        };
+
+        const containerId = 'plotsVisualization';
+        document.getElementById(containerId).innerHTML = '<div id="mainPlotArea" style="height: 450px;"></div>';
+        Plotly.newPlot('mainPlotArea', traces, layout, { responsive: true });
+    }
+}
+
+function extractBiasCondition(filename) {
+    const name = filename.toLowerCase().replace(/\.(txt|dat|out|log)$/i, '');
+
+    if (name.includes('fwd') || name.includes('forward')) return 'fwd';
+    if (name.includes('rev') || name.includes('reverse')) return 'rev';
+    if (name.includes('eq') || name.endsWith('eq')) return 'eq';
+
+    // Extract suffix after band type prefix
+    const match = name.match(/^(cb|vb|qf|qfn|qfp|ec|ev|efn|efp)(.*)$/);
+    if (match && match[2]) {
+        const suffix = match[2].replace(/^[_\-]/, '');
+        return suffix || 'eq';
+    }
+
+    return 'eq';
+}
+
+function getBandTraceStyle(variable, filename) {
+    let traceName = filename;
+    let color = '#333';
+
+    // Priority: use variable from backend
+    if (variable === 'band_con') {
+        return { traceName: 'Conduction Band (Ec)', color: '#dc3545' };
+    } else if (variable === 'band_val') {
+        return { traceName: 'Valence Band (Ev)', color: '#007bff' };
+    } else if (variable === 'qfn') {
+        return { traceName: 'Electron Quasi-Fermi (Efn)', color: '#28a745' };
+    } else if (variable === 'qfp') {
+        return { traceName: 'Hole Quasi-Fermi (Efp)', color: '#fd7e14' };
+    }
+
+    // Fallback to filename detection
+    const nameLower = filename.toLowerCase();
+    if (nameLower.includes('cb') || nameLower.includes('ec') || nameLower.includes('conduction')) {
+        traceName = 'Conduction Band (Ec)';
+        color = '#dc3545';
+    } else if (nameLower.includes('vb') || nameLower.includes('ev') || nameLower.includes('valence')) {
+        traceName = 'Valence Band (Ev)';
+        color = '#007bff';
+    } else if (nameLower.includes('qfn') || nameLower.includes('efn')) {
+        traceName = 'Electron Quasi-Fermi (Efn)';
+        color = '#28a745';
+    } else if (nameLower.includes('qfp') || nameLower.includes('efp')) {
+        traceName = 'Hole Quasi-Fermi (Efp)';
+        color = '#fd7e14';
+    } else if (nameLower.includes('qf') || nameLower.includes('fermi')) {
+        traceName = 'Quasi-Fermi Level';
+        color = '#17a2b8';
+    }
+
+    return { traceName, color };
+}
+
 function plotSelectedFile(data, filename, fileType) {
-    const containerId = 'selectedFilePlot';
+    // Plot in the main visualization area
+    const mainContainer = document.getElementById('plotsVisualization');
+    mainContainer.innerHTML = '<div id="mainPlotArea" style="height: 450px;"></div>';
+    const containerId = 'mainPlotArea';
 
     if (!data.values || data.values.length === 0) {
-        document.getElementById(containerId).innerHTML =
+        mainContainer.innerHTML =
             '<p class="text-muted text-center py-5">No plottable data in this file</p>';
         return;
     }
@@ -692,6 +822,7 @@ async function loadAndDisplayData(files) {
                 cvFiles.push(file);
                 break;
             case 'band':
+            case 'qf':  // Include quasi-Fermi files with band diagrams
                 bandFiles.push(file);
                 break;
             case 'mesh':

@@ -663,13 +663,9 @@ code {
     background-color: #f8f9fa !important;
 }
 
-/* Selected file plot card */
-#selectedFilePlotCard {
-    border-left: 4px solid var(--primary-color);
-}
-
-#selectedFilePlotCard .card-header {
-    background-color: #f0f7ff;
+/* Main plot area */
+#mainPlotArea {
+    min-height: 400px;
 }
 
 /* Deck content in results page */
