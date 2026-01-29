@@ -666,12 +666,18 @@ def _parse_iv_file(lines, data):
     return data
 
 
-def _parse_1d_data_file(lines, data):
-    """Parse 1D plot data file (band diagrams, etc.)."""
+def _parse_1d_plot_file(lines, data):
+    """Parse 1D plot data file (band diagrams, etc.).
+
+    PADRE ASCII plot files have the format:
+    - Lines starting with # or $ are comments/headers
+    - Data lines have space-separated x y values
+    """
     values = []
     for line in lines:
         line = line.strip()
-        if not line or line.startswith('#') or line.startswith('!'):
+        # Skip empty lines and comments (# or $ or !)
+        if not line or line.startswith('#') or line.startswith('!') or line.startswith('$'):
             continue
         parts = line.split()
         if len(parts) >= 2:
@@ -683,11 +689,15 @@ def _parse_1d_data_file(lines, data):
 
     if values:
         data['values'] = values
-        data['columns'] = ['Position (um)', 'Value']
+        data['columns'] = ['Position (μm)', 'Value']
         if len(values[0]) > 2:
-            data['columns'] = ['Position (um)'] + [f'Value {i}' for i in range(1, len(values[0]))]
+            data['columns'] = ['Position (μm)'] + [f'Value {i}' for i in range(1, len(values[0]))]
 
     return data
+
+
+# Alias for backward compatibility
+_parse_1d_data_file = _parse_1d_plot_file
 
 
 def _parse_mesh_file(lines, data):
