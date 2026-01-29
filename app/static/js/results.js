@@ -353,13 +353,6 @@ function getFileIcon(fileType) {
 
 async function onFileClick(filename, fileType) {
     try {
-        // Switch to the Plots tab
-        const plotsTab = document.getElementById('plotsTab');
-        if (plotsTab) {
-            const tab = new bootstrap.Tab(plotsTab);
-            tab.show();
-        }
-
         // Load and plot the single file
         const result = await apiCall(`/api/results/${simId}/file/${filename}`);
 
@@ -374,13 +367,6 @@ async function onFileClick(filename, fileType) {
 
 async function onCategoryPlotAll(category, files) {
     try {
-        // Switch to the Plots tab
-        const plotsTab = document.getElementById('plotsTab');
-        if (plotsTab) {
-            const tab = new bootstrap.Tab(plotsTab);
-            tab.show();
-        }
-
         // Handle different categories
         if (category === 'band' || category === 'qf') {
             await plotAllBandDiagrams(files);
@@ -408,10 +394,14 @@ async function plotAllBandDiagrams(files) {
     });
 
     const traces = [];
-    const biasColors = {
-        'eq': { cb: '#dc3545', vb: '#007bff', qfn: '#28a745', qfp: '#fd7e14' },
-        'fwd': { cb: '#c82333', vb: '#0056b3', qfn: '#1e7e34', qfp: '#e06400' },
-        'rev': { cb: '#a71d2a', vb: '#004494', qfn: '#155724', qfp: '#c55a00' }
+
+    // Band type determines line style: Ec = solid, Ev = dash, Efn = dot, Efp = dashdot
+    // Color indicates bias condition (consistent with other plots)
+    const bandStyles = {
+        'cb': 'solid',
+        'vb': 'dash',
+        'qfn': 'dot',
+        'qfp': 'dashdot'
     };
 
     for (const file of allBandFiles) {
@@ -423,12 +413,13 @@ async function plotAllBandDiagrams(files) {
                 const energies = values.map(row => row[1]);
 
                 const biasCondition = extractBiasCondition(file.name);
+                const biasLabel = getBiasLabel(biasCondition);
+                const color = getBiasColor(biasCondition);
                 const { traceName, colorKey } = getBandTraceInfo(result.data.variable, file.name);
-                const colors = biasColors[biasCondition] || biasColors['eq'];
-                const color = colors[colorKey] || '#333';
+                const dash = bandStyles[colorKey] || 'solid';
 
                 // Add bias condition to trace name if not equilibrium
-                const fullTraceName = biasCondition === 'eq' ? traceName : `${traceName} (${biasCondition})`;
+                const fullTraceName = biasCondition === 'eq' ? traceName : `${traceName} (${biasLabel})`;
 
                 traces.push({
                     x: positions,
@@ -436,7 +427,7 @@ async function plotAllBandDiagrams(files) {
                     type: 'scatter',
                     mode: 'lines',
                     name: fullTraceName,
-                    line: { color: color, width: 2 }
+                    line: { color: color, width: 2, dash: dash }
                 });
             }
         } catch (error) {
@@ -462,10 +453,29 @@ async function plotAllBandDiagrams(files) {
     }
 }
 
+// Unified color scheme based on bias condition - consistent across all plot types
+const BIAS_COLORS = {
+    'eq': '#007bff',      // Blue for equilibrium
+    'fwd': '#28a745',     // Green for forward bias
+    'rev': '#dc3545',     // Red for reverse bias
+    'default': '#6f42c1'  // Purple for unknown
+};
+
+function getBiasColor(biasCondition) {
+    return BIAS_COLORS[biasCondition] || BIAS_COLORS['default'];
+}
+
+function getBiasLabel(biasCondition) {
+    switch (biasCondition) {
+        case 'eq': return 'Equilibrium';
+        case 'fwd': return 'Forward Bias';
+        case 'rev': return 'Reverse Bias';
+        default: return biasCondition;
+    }
+}
+
 async function plotAllIVCurves(files, category) {
     const traces = [];
-    const colors = ['#007bff', '#dc3545', '#28a745', '#fd7e14', '#6f42c1', '#17a2b8'];
-    let colorIndex = 0;
 
     for (const file of files) {
         try {
@@ -475,7 +485,9 @@ async function plotAllIVCurves(files, category) {
                 const x = values.map(row => row[0]);
                 const y = values.map(row => row[1]);
 
-                // Get descriptive legend name
+                // Get bias condition and use consistent color
+                const biasCondition = extractBiasCondition(file.name);
+                const color = getBiasColor(biasCondition);
                 const legendName = getDescriptiveName(file.name, category);
 
                 traces.push({
@@ -484,10 +496,9 @@ async function plotAllIVCurves(files, category) {
                     type: 'scatter',
                     mode: 'lines+markers',
                     name: legendName,
-                    line: { color: colors[colorIndex % colors.length], width: 2 },
+                    line: { color: color, width: 2 },
                     marker: { size: 4 }
                 });
-                colorIndex++;
             }
         } catch (error) {
             console.error(`Error loading IV file ${file.name}:`, error);
@@ -518,6 +529,9 @@ async function plotAllIVCurves(files, category) {
 async function plotAllCarriers(files) {
     const traces = [];
 
+    // Carrier-specific colors vary by bias condition
+    // Electrons: solid line, Holes: dashed line
+    // Color indicates bias condition
     for (const file of files) {
         try {
             const result = await apiCall(`/api/results/${simId}/file/${file.name}`);
@@ -527,20 +541,19 @@ async function plotAllCarriers(files) {
                 const y = values.map(row => row[1]);
 
                 const biasCondition = extractBiasCondition(file.name);
-                const biasLabel = biasCondition === 'eq' ? 'Equilibrium' :
-                                  biasCondition === 'fwd' ? 'Forward Bias' :
-                                  biasCondition === 'rev' ? 'Reverse Bias' : biasCondition;
+                const biasLabel = getBiasLabel(biasCondition);
+                const color = getBiasColor(biasCondition);
 
                 let carrierType = 'Carrier';
-                let color = '#6f42c1';
+                let dash = 'solid';
                 const variable = result.data.variable || '';
 
                 if (variable === 'electrons' || file.name.toLowerCase().includes('ele')) {
                     carrierType = 'Electrons';
-                    color = '#007bff';
+                    dash = 'solid';
                 } else if (variable === 'holes' || file.name.toLowerCase().includes('hole')) {
                     carrierType = 'Holes';
-                    color = '#dc3545';
+                    dash = 'dash';
                 }
 
                 const traceName = `${carrierType} (${biasLabel})`;
@@ -551,7 +564,7 @@ async function plotAllCarriers(files) {
                     type: 'scatter',
                     mode: 'lines',
                     name: traceName,
-                    line: { color: color, width: 2 }
+                    line: { color: color, width: 2, dash: dash }
                 });
             }
         } catch (error) {
@@ -579,9 +592,9 @@ async function plotAllCarriers(files) {
 
 async function plotAllFields(files) {
     const traces = [];
-    const colors = ['#fd7e14', '#20c997', '#6f42c1', '#17a2b8'];
-    let colorIndex = 0;
 
+    // Field-specific: Potential = solid, Electric Field = dash, Doping = dot
+    // Color indicates bias condition
     for (const file of files) {
         try {
             const result = await apiCall(`/api/results/${simId}/file/${file.name}`);
@@ -591,20 +604,23 @@ async function plotAllFields(files) {
                 const y = values.map(row => row[1]);
 
                 const biasCondition = extractBiasCondition(file.name);
-                const biasLabel = biasCondition === 'eq' ? 'Equilibrium' :
-                                  biasCondition === 'fwd' ? 'Forward Bias' :
-                                  biasCondition === 'rev' ? 'Reverse Bias' : biasCondition;
+                const biasLabel = getBiasLabel(biasCondition);
+                const color = getBiasColor(biasCondition);
 
                 let fieldType = 'Field';
+                let dash = 'solid';
                 const variable = result.data.variable || '';
                 const nameLower = file.name.toLowerCase();
 
                 if (variable === 'potential' || nameLower.includes('pot') || nameLower.includes('phi')) {
                     fieldType = 'Potential';
+                    dash = 'solid';
                 } else if (variable === 'e_field' || nameLower.includes('efield')) {
                     fieldType = 'Electric Field';
+                    dash = 'dash';
                 } else if (variable === 'doping' || nameLower.includes('dop')) {
                     fieldType = 'Doping';
+                    dash = 'dot';
                 }
 
                 // Doping is static, no bias label needed
@@ -616,9 +632,8 @@ async function plotAllFields(files) {
                     type: 'scatter',
                     mode: 'lines',
                     name: traceName,
-                    line: { color: colors[colorIndex % colors.length], width: 2 }
+                    line: { color: color, width: 2, dash: dash }
                 });
-                colorIndex++;
             }
         } catch (error) {
             console.error(`Error loading field file ${file.name}:`, error);
@@ -645,8 +660,6 @@ async function plotAllFields(files) {
 
 async function plotAllGeneric(files, category) {
     const traces = [];
-    const colors = ['#007bff', '#dc3545', '#28a745', '#fd7e14', '#6f42c1', '#17a2b8'];
-    let colorIndex = 0;
 
     for (const file of files) {
         try {
@@ -656,15 +669,19 @@ async function plotAllGeneric(files, category) {
                 const x = values.map(row => row[0]);
                 const y = values.map(row => row[1]);
 
+                // Use bias-based colors for consistency
+                const biasCondition = extractBiasCondition(file.name);
+                const color = getBiasColor(biasCondition);
+                const biasLabel = getBiasLabel(biasCondition);
+
                 traces.push({
                     x: x,
                     y: y,
                     type: 'scatter',
                     mode: 'lines',
-                    name: file.name,
-                    line: { color: colors[colorIndex % colors.length], width: 2 }
+                    name: `${file.name} (${biasLabel})`,
+                    line: { color: color, width: 2 }
                 });
-                colorIndex++;
             }
         } catch (error) {
             console.error(`Error loading file ${file.name}:`, error);
@@ -1138,7 +1155,6 @@ async function loadAndDisplayData(files) {
     // Categorize files by type using the helper function
     const ivFiles = [];
     const cvFiles = [];
-    const meshFiles = [];
 
     for (const file of files) {
         const category = categorizeFile(file.name);
@@ -1149,27 +1165,16 @@ async function loadAndDisplayData(files) {
             case 'cv':
                 cvFiles.push(file);
                 break;
-            case 'mesh':
-                meshFiles.push(file);
-                break;
         }
     }
 
-    // Load and display I-V or C-V curves in the Plots tab
+    // Load and display I-V or C-V curves in the Plots area
     const plotFiles = [...ivFiles, ...cvFiles];
     if (plotFiles.length > 0) {
         await loadIVData(plotFiles);
     } else {
         document.getElementById('plotsVisualization').innerHTML =
             '<p class="text-muted text-center p-5">No I-V or C-V data available. Click on an output file to view its plot.</p>';
-    }
-
-    // Load and display mesh
-    if (meshFiles.length > 0) {
-        await loadMeshData(meshFiles);
-    } else {
-        document.getElementById('meshVisualization').innerHTML =
-            '<p class="text-muted text-center p-5">No mesh data available.</p>';
     }
 }
 
@@ -1228,55 +1233,3 @@ function plotIVCurve(containerId, data, filename) {
     Plotly.newPlot(containerId, [trace], layout, { responsive: true });
 }
 
-async function loadMeshData(files) {
-    const meshContainer = document.getElementById('meshVisualization');
-    meshContainer.innerHTML = '';
-
-    for (const file of files) {
-        try {
-            const result = await apiCall(`/api/results/${simId}/file/${file.name}`);
-            if (result.success && result.data.values && result.data.values.length > 0) {
-                const chartDiv = document.createElement('div');
-                chartDiv.id = `mesh-chart-${file.name.replace(/[^a-zA-Z0-9]/g, '_')}`;
-                chartDiv.style.height = '500px';
-                meshContainer.appendChild(chartDiv);
-
-                plotMesh(chartDiv.id, result.data, file.name);
-            }
-        } catch (error) {
-            console.error(`Error loading mesh file ${file.name}:`, error);
-        }
-    }
-
-    if (meshContainer.innerHTML === '') {
-        meshContainer.innerHTML = '<p class="text-muted text-center p-5">No mesh data available</p>';
-    }
-}
-
-function plotMesh(containerId, data, filename) {
-    const values = data.values;
-    if (!values || values.length === 0) return;
-
-    const x = values.map(row => row[0]);
-    const y = values.map(row => row[1]);
-
-    const trace = {
-        x: x,
-        y: y,
-        type: 'scatter',
-        mode: 'markers',
-        name: 'Mesh Points',
-        marker: { size: 3, color: '#007bff' }
-    };
-
-    const layout = {
-        title: `Device Mesh - ${filename}`,
-        xaxis: { title: 'X (μm)', gridcolor: '#e0e0e0', scaleanchor: 'y', scaleratio: 1 },
-        yaxis: { title: 'Y (μm)', gridcolor: '#e0e0e0' },
-        plot_bgcolor: '#fafafa',
-        paper_bgcolor: '#ffffff',
-        margin: { t: 50, r: 30, b: 50, l: 70 }
-    };
-
-    Plotly.newPlot(containerId, [trace], layout, { responsive: true });
-}
