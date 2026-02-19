@@ -80,7 +80,9 @@ async function selectPreset(deviceType, label) {
         // Show workspace, hide grid
         document.getElementById('deviceGrid').style.display = 'none';
         document.getElementById('deviceWorkspace').style.display = '';
-        document.getElementById('workspaceDeviceLabel').textContent = label;
+        const wLabel = document.getElementById('workspaceDeviceLabel');
+        wLabel.textContent = label;
+        wLabel.dataset.deviceType = deviceType;   // used by refreshSchematic
         document.getElementById('submitBtn').disabled = false;
         document.getElementById('refreshDeckBtn').disabled = false;
         document.getElementById('svgHint').style.display = '';
@@ -412,37 +414,6 @@ function setupFormSubmit() {
             showAlert(`Error: ${err.message}`, 'danger');
         }
     });
-}
-
-// selectPreset also needs to store deviceType for refreshSchematic
-const _origSelectPreset = selectPreset;
-// Patch the label element to carry the deviceType
-async function selectPreset(deviceType, label) {
-    try {
-        const result = await apiCall(`/api/devices/presets/${deviceType}`);
-        if (!result.success) { showAlert('Failed to load preset', 'danger'); return; }
-
-        selectedPreset   = result.preset;
-        paramDescriptions = result.preset.param_descriptions || {};
-
-        document.getElementById('deviceGrid').style.display = 'none';
-        document.getElementById('deviceWorkspace').style.display = '';
-        const wLabel = document.getElementById('workspaceDeviceLabel');
-        wLabel.textContent = label;
-        wLabel.dataset.deviceType = deviceType;    // store for refreshSchematic
-
-        document.getElementById('submitBtn').disabled = false;
-        document.getElementById('refreshDeckBtn').disabled = false;
-        document.getElementById('svgHint').style.display = '';
-
-        renderTabParameters(deviceType, result.preset);
-        autoGenerateName();
-        refreshSchematic();
-        if (document.getElementById('autoUpdateDeck').checked) generateDeckPreview();
-
-    } catch (err) {
-        showAlert(`Error: ${err.message}`, 'danger');
-    }
 }
 
 // ─────────────────────────────────────────────────────────

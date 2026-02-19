@@ -44,7 +44,6 @@
             <small>PADRE Web UI &copy; <span id="footerYear"></span>. Powered by <strong>PADRE</strong> &amp; <strong>nanoHUB</strong>.</small>
         </div>
     </footer>
-    <script>document.getElementById('footerYear').textContent = new Date().getFullYear();</script>
 
     <script src="{{ base_path }}{{ url_for('static', filename='js/vendor/bootstrap.bundle.min.js') }}"></script>
     <script src="{{ base_path }}{{ url_for('static', filename='js/vendor/chart.umd.min.js') }}"></script>
@@ -54,6 +53,7 @@
         const BASE_PATH = '{{ base_path }}';
     </script>
     <script src="{{ base_path }}{{ url_for('static', filename='js/utils.js') }}"></script>
+    <script>document.getElementById('footerYear').textContent = new Date().getFullYear();</script>
     {% block scripts %}{% endblock %}
 </body>
 </html>
