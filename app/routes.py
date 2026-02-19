@@ -618,9 +618,18 @@ def _parse_padre_output_file(filepath, filename, sim_params=None):
         name_lower = filename.lower()
         name_base = name_lower.replace('.txt', '').replace('.dat', '').replace('.out', '').replace('.log', '')
 
+        # Detect PADRE IV log file by content first (# PADRE header + Q-records)
+        # This catches any filename (iv, idvd, idvg, idvb, log, etc.)
+        _is_padre_iv = content.lstrip().startswith('# PADRE')
+
         # Use pattern matching for file type
         # PADRE uses naming conventions like: vbeq, cbeq, cbfwd, vbfwd, qfnfwd, qfpfwd, mesh, iv
-        if name_base == 'iv' or name_base.endswith('_iv') or name_base.startswith('iv_') or 'iv' in name_base:
+        # Match the same IV heuristics as the JS categorizeFile() frontend function
+        _iv_by_name = (name_base == 'iv' or name_base.endswith('_iv') or
+                       name_base.startswith('iv') or 'iv' in name_base or
+                       name_base.startswith('id') or name_base.startswith('ig') or
+                       name_base.startswith('is'))
+        if _is_padre_iv or _iv_by_name:
             data['type'] = 'iv'
             data['variable'] = 'iv'
             data = _parse_iv_file(lines, data)

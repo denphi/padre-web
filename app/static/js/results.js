@@ -486,29 +486,33 @@ function getBiasLabel(biasCondition) {
 
 async function plotAllIVCurves(files, category) {
     const traces = [];
+    const traceColors = ['#007bff', '#dc3545', '#28a745', '#fd7e14', '#6f42c1', '#17a2b8'];
+    let colorIdx = 0;
 
     for (const file of files) {
         try {
             const result = await apiCall(`/api/results/${simId}/file/${file.name}`);
             if (result.success && result.data && result.data.values && result.data.values.length > 0) {
                 const values = result.data.values;
+                const columns = result.data.columns || [];
                 const x = values.map(row => row[0]);
-                const y = values.map(row => row[1]);
+                const numCurrentCols = values[0] ? values[0].length - 1 : 1;
+                const legendBase = getDescriptiveName(file.name, category);
 
-                // Get bias condition and use consistent color
-                const biasCondition = extractBiasCondition(file.name);
-                const color = getBiasColor(biasCondition);
-                const legendName = getDescriptiveName(file.name, category);
-
-                traces.push({
-                    x: x,
-                    y: y,
-                    type: 'scatter',
-                    mode: 'lines+markers',
-                    name: legendName,
-                    line: { color: color, width: 2 },
-                    marker: { size: 4 }
-                });
+                for (let i = 0; i < numCurrentCols; i++) {
+                    const y = values.map(row => row[i + 1]);
+                    const colLabel = columns[i + 1] || `I_elec${i + 1} (A)`;
+                    const name = numCurrentCols === 1 ? legendBase : `${legendBase} — ${colLabel}`;
+                    traces.push({
+                        x, y,
+                        type: 'scatter',
+                        mode: 'lines+markers',
+                        name,
+                        line: { color: traceColors[colorIdx % traceColors.length], width: 2 },
+                        marker: { size: 4 }
+                    });
+                    colorIdx++;
+                }
             }
         } catch (error) {
             console.error(`Error loading IV file ${file.name}:`, error);
@@ -516,12 +520,13 @@ async function plotAllIVCurves(files, category) {
     }
 
     if (traces.length > 0) {
-        const title = category === 'cv' ? 'C-V Characteristics (All)' : 'I-V Characteristics (All)';
+        const title = category === 'cv' ? 'C-V Characteristics' : 'I-V Characteristics';
+        const xLabel = traces.length > 0 ? 'Voltage (V)' : 'Voltage (V)';
         const yLabel = category === 'cv' ? 'Capacitance (F)' : 'Current (A)';
 
         const layout = {
             title: title,
-            xaxis: { title: 'Voltage (V)', gridcolor: '#e0e0e0' },
+            xaxis: { title: xLabel, gridcolor: '#e0e0e0' },
             yaxis: { title: yLabel, gridcolor: '#e0e0e0', exponentformat: 'e' },
             plot_bgcolor: '#fafafa',
             paper_bgcolor: '#ffffff',
@@ -1275,33 +1280,10 @@ async function loadAndDisplayData(files) {
 }
 
 async function loadIVData(files) {
-    const plotsContainer = document.getElementById('plotsVisualization');
-    plotsContainer.innerHTML = '';
+    if (files.length === 0) return;
 
-    for (const file of files) {
-        try {
-            const result = await apiCall(`/api/results/${simId}/file/${file.name}`);
-            if (result.success && result.data.values && result.data.values.length > 0) {
-                const chartDiv = document.createElement('div');
-                chartDiv.id = `iv-chart-${file.name.replace(/[^a-zA-Z0-9]/g, '_')}`;
-                chartDiv.style.height = '400px';
-                chartDiv.style.marginBottom = '20px';
-                plotsContainer.appendChild(chartDiv);
-
-                plotIVCurve(chartDiv.id, result.data, file.name);
-            }
-        } catch (error) {
-            console.error(`Error loading IV file ${file.name}:`, error);
-        }
-    }
-
-    if (plotsContainer.innerHTML === '') {
-        plotsContainer.innerHTML = '<p class="text-muted text-center p-5">No I-V data could be plotted.</p>';
-    }
-}
-
-function plotIVCurve(containerId, data, filename) {
-    plotIVData(containerId, data.values, filename, data.columns || []);
+    // Use the same path as clicking: plotAllIVCurves overlays all IV files correctly
+    await plotAllIVCurves(files, 'iv');
 }
 
 
