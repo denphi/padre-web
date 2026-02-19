@@ -1,14 +1,24 @@
-/* ── Builder Toolbox ──────────────────────────────────── */
+/* ── Builder Toolbox ──────────────────────────────────────── */
 
-.toolbox-section {
-    border-top: 1px solid #dee2e6;
+.builder-toolbox-section {
+    border-top: 1px solid #edf0f4;
     padding-top: 6px;
-    margin-top: 2px;
+    margin-top: 4px;
 }
 
-.toolbox-section:first-child {
+.builder-toolbox-section:first-child {
     border-top: none;
     margin-top: 0;
+    padding-top: 0;
+}
+
+.builder-section-label {
+    font-size: 0.68rem;
+    color: #7a8ea0;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+    padding-left: 2px;
 }
 
 .toolbox-item {
@@ -17,61 +27,236 @@
     align-items: center;
     justify-content: center;
     gap: 3px;
-    padding: 6px 4px;
-    border-radius: 6px;
-    border: 1px solid #dee2e6;
+    padding: 5px 4px;
+    border-radius: 4px;
+    border: 1px solid #dde3ec;
     background: #fff;
-    font-size: 0.72rem;
-    color: #495057;
+    font-size: 0.7rem;
+    color: #5a7a9a;
     cursor: grab;
     user-select: none;
-    transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
-    margin-bottom: 4px;
+    transition: background 0.12s, border-color 0.12s;
+    margin-bottom: 3px;
+    letter-spacing: 0.02em;
 }
 
 .toolbox-item:hover {
-    background: #e9f3ff;
-    border-color: #4a90d9;
-    color: #4a90d9;
-    box-shadow: 0 2px 6px rgba(74, 144, 217, 0.2);
+    background: #eef4fa;
+    border-color: #5a7a9a;
+    color: #3d5a73;
 }
 
 .toolbox-item:active {
     cursor: grabbing;
-    background: #d4e9ff;
+    background: #dde8f0;
 }
 
 .toolbox-item i {
-    font-size: 1rem;
-    opacity: 0.7;
+    font-size: 0.85rem;
+    opacity: 0.75;
 }
 
-/* ── Canvas ───────────────────────────────────────────── */
+/* ── Pipeline Container ───────────────────────────────────── */
 
-#builderCanvas {
-    display: block;
-    width: 100%;
-    height: 100%;
-    min-height: 300px;
+#pipelineContainer {
+    align-items: stretch;
+    min-width: max-content;
+    padding: 4px 0;
 }
 
-#dropHint {
-    pointer-events: none;
-    opacity: 0.5;
+/* ── Section Columns ──────────────────────────────────────── */
+
+.builder-section-col {
+    display: flex;
+    flex-direction: column;
+    min-width: 200px;
+    flex-shrink: 0;
 }
 
-/* ── Properties Panel ─────────────────────────────────── */
+.builder-section-col--wide {
+    min-width: 240px;
+}
 
-#propertiesForm .prop-input {
+.builder-section-header {
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: #5a7a9a;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    padding: 4px 8px 6px;
+    border-bottom: 2px solid #dde3ec;
+    margin-bottom: 6px;
+    flex-shrink: 0;
+}
+
+.builder-section-divider {
+    width: 1px;
+    background: #dde3ec;
+    margin: 0 4px;
+    flex-shrink: 0;
+    align-self: stretch;
+}
+
+/* ── Block Drop List ──────────────────────────────────────── */
+
+.builder-block-list {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 4px;
+    border-radius: 4px;
+    min-height: 60px;
+    transition: background 0.12s;
+    overflow-y: auto;
+}
+
+.builder-block-list.drag-over {
+    background: #eef4fa;
+    outline: 2px dashed #5a7a9a;
+    outline-offset: -2px;
+}
+
+.builder-empty-hint {
+    font-size: 0.72rem;
+    color: #a8b8c4;
+    text-align: center;
+    padding: 12px 8px;
+    border: 1px dashed #d0d8e4;
+    border-radius: 4px;
+    letter-spacing: 0.02em;
+    display: none;
+}
+
+/* ── Block Cards ──────────────────────────────────────────── */
+
+.builder-block {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px 6px 6px;
+    border-radius: 4px;
+    border: 1px solid #dde3ec;
+    background: #fff;
+    cursor: pointer;
+    user-select: none;
+    transition: box-shadow 0.12s, border-color 0.12s, opacity 0.12s;
+    position: relative;
+}
+
+.builder-block:hover {
+    border-color: #5a7a9a;
+    box-shadow: 0 1px 4px rgba(90,122,154,0.12);
+}
+
+.builder-block.selected {
+    border-color: var(--block-color, #3d5a73);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--block-color, #3d5a73) 20%, transparent);
+    background: color-mix(in srgb, var(--block-color, #3d5a73) 4%, #fff);
+}
+
+.builder-block.dragging {
+    opacity: 0.4;
+}
+
+.builder-block-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 5px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    color: #fff;
+    font-size: 0.75rem;
+    opacity: 0.9;
+}
+
+.builder-block-body {
+    flex: 1;
+    min-width: 0;
+}
+
+.builder-block-label {
     font-size: 0.8rem;
+    font-weight: 600;
+    color: #2c3e50;
+    letter-spacing: 0.01em;
+    line-height: 1.2;
 }
 
-/* ── Deck Preview collapse header ─────────────────────── */
+.builder-block-summary {
+    font-size: 0.68rem;
+    color: #7a8ea0;
+    letter-spacing: 0.01em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-top: 1px;
+}
+
+.builder-block-handle {
+    color: #c0ccd8;
+    font-size: 0.75rem;
+    cursor: grab;
+    flex-shrink: 0;
+    padding: 2px;
+    transition: color 0.12s;
+}
+
+.builder-block:hover .builder-block-handle {
+    color: #8a9aaa;
+}
+
+/* ── Drop Indicator ───────────────────────────────────────── */
+
+.drop-indicator {
+    height: 2px;
+    background: #5a7a9a;
+    border-radius: 2px;
+    margin: 1px 0;
+    pointer-events: none;
+    flex-shrink: 0;
+}
+
+/* ── Properties Panel ─────────────────────────────────────── */
+
+.builder-block-type-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-size: 0.72rem;
+    font-weight: 500;
+    color: #fff;
+    letter-spacing: 0.03em;
+}
+
+#propertiesForm .form-label {
+    font-size: 0.75rem;
+    margin-bottom: 2px;
+}
+
+#propertiesForm .form-control,
+#propertiesForm .form-select {
+    font-size: 0.78rem;
+}
+
+#propertiesForm .form-check-label {
+    font-size: 0.78rem;
+}
+
+/* ── Deck Preview ──────────────────────────────────────────── */
 
 #deckCollapseToggle {
     cursor: pointer;
 }
 
 #deckCollapseToggle:hover {
-    background: #f1f3f5;
+    background: #f4f6f8;
 }
+
+/* Scrollbar refinement for block lists */
+.builder-block-list::-webkit-scrollbar { width: 4px; }
+.builder-block-list::-webkit-scrollbar-track { background: transparent; }
+.builder-block-list::-webkit-scrollbar-thumb { background: #d0d8e4; border-radius: 2px; }

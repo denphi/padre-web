@@ -1,50 +1,55 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="row mb-2">
+<div class="row mb-2 align-items-center">
     <div class="col">
-        <h1 class="mb-0"><i class="fas fa-drafting-compass"></i> Advanced Simulation Builder</h1>
-        <p class="text-muted small mb-0">Drag components onto the canvas to construct a custom PADRE simulation from scratch.</p>
+        <h5 class="mb-0 fw-semibold" style="color:#1a3a5c; letter-spacing:0.02em;">
+            <i class="fas fa-drafting-compass me-2" style="color:#5a7a9a;"></i>Advanced Simulation Builder
+        </h5>
+        <p class="text-muted mb-0" style="font-size:0.78rem; letter-spacing:0.02em;">
+            Add blocks from the toolbox, drag to reorder, then generate your PADRE deck.
+        </p>
     </div>
     <div class="col-auto d-flex gap-2 align-items-center">
-        <input type="text" class="form-control form-control-sm" id="simNameBuilder" placeholder="Simulation name…" style="width:200px">
-        <button class="btn btn-outline-secondary btn-sm" id="clearCanvasBtn" title="Clear canvas">
+        <input type="text" class="form-control form-control-sm" id="simNameBuilder"
+               placeholder="Simulation name…" style="width:200px">
+        <button class="btn btn-sm btn-outline-secondary" id="clearCanvasBtn" title="Clear all blocks">
             <i class="fas fa-trash"></i> Clear
         </button>
-        <button class="btn btn-outline-info btn-sm" id="uploadDeckBtn" title="Upload existing PADRE deck">
+        <button class="btn btn-sm btn-outline-secondary" id="uploadDeckBtn" title="Upload existing PADRE deck">
             <i class="fas fa-upload"></i> Upload Deck
         </button>
-        <button class="btn btn-outline-primary btn-sm" id="generateDeckBtn">
+        <button class="btn btn-sm btn-outline-primary" id="generateDeckBtn">
             <i class="fas fa-file-code"></i> Preview Deck
         </button>
-        <button class="btn btn-success btn-sm" id="runBuilderBtn" disabled>
-            <i class="fas fa-play"></i> Run Simulation
+        <button class="btn btn-sm btn-success" id="runBuilderBtn" disabled>
+            <i class="fas fa-play"></i> Run
         </button>
     </div>
 </div>
 
-<div class="row g-2" style="height: calc(100vh - 180px);">
+<div class="row g-2" style="height: calc(100vh - 185px);">
 
     <!-- ① Toolbox -->
-    <div class="col-auto" style="width: 130px;">
+    <div class="col-auto d-flex flex-column" style="width:120px;">
         <div class="card h-100">
-            <div class="card-header py-2 text-center">
-                <small class="fw-bold text-muted text-uppercase">Toolbox</small>
+            <div class="card-header py-2 text-center" style="font-size:0.7rem; color:#5a7a9a; letter-spacing:0.06em; text-transform:uppercase;">
+                Toolbox
             </div>
-            <div class="card-body p-2 d-flex flex-column gap-2">
+            <div class="card-body p-2 d-flex flex-column gap-1">
 
-                <div class="toolbox-section">
-                    <div class="small text-muted mb-1">Structure</div>
+                <div class="builder-toolbox-section">
+                    <div class="builder-section-label">Structure</div>
                     <div class="toolbox-item" draggable="true" data-block-type="mesh">
                         <i class="fas fa-th"></i><span>Mesh</span>
                     </div>
                     <div class="toolbox-item" draggable="true" data-block-type="region">
-                        <i class="fas fa-square"></i><span>Region</span>
+                        <i class="fas fa-vector-square"></i><span>Region</span>
                     </div>
                 </div>
 
-                <div class="toolbox-section">
-                    <div class="small text-muted mb-1">Physics</div>
+                <div class="builder-toolbox-section">
+                    <div class="builder-section-label">Physics</div>
                     <div class="toolbox-item" draggable="true" data-block-type="doping">
                         <i class="fas fa-atom"></i><span>Doping</span>
                     </div>
@@ -53,8 +58,8 @@
                     </div>
                 </div>
 
-                <div class="toolbox-section">
-                    <div class="small text-muted mb-1">Contacts</div>
+                <div class="builder-toolbox-section">
+                    <div class="builder-section-label">Contacts</div>
                     <div class="toolbox-item" draggable="true" data-block-type="electrode">
                         <i class="fas fa-plug"></i><span>Electrode</span>
                     </div>
@@ -63,8 +68,8 @@
                     </div>
                 </div>
 
-                <div class="toolbox-section">
-                    <div class="small text-muted mb-1">Simulation</div>
+                <div class="builder-toolbox-section">
+                    <div class="builder-section-label">Simulation</div>
                     <div class="toolbox-item" draggable="true" data-block-type="solve">
                         <i class="fas fa-bolt"></i><span>Solve</span>
                     </div>
@@ -77,67 +82,91 @@
         </div>
     </div>
 
-    <!-- ② Canvas + Deck Preview (stacked) -->
-    <div class="col d-flex flex-column gap-2">
+    <!-- ② Main area: block list + deck preview -->
+    <div class="col d-flex flex-column gap-2 min-w-0">
 
-        <!-- Canvas -->
-        <div class="card flex-grow-1" style="overflow:hidden; min-height: 0;">
+        <!-- Block pipeline -->
+        <div class="card flex-grow-1" style="overflow:hidden; min-height:0;">
             <div class="card-header py-2 d-flex justify-content-between align-items-center">
-                <small class="fw-bold text-muted text-uppercase">Canvas</small>
-                <div class="d-flex gap-2 align-items-center">
-                    <span class="small text-muted" id="blockCount">0 blocks</span>
-                    <button class="btn btn-outline-secondary btn-sm py-0" id="zoomInBtn" title="Zoom in">+</button>
-                    <button class="btn btn-outline-secondary btn-sm py-0" id="zoomOutBtn" title="Zoom out">-</button>
-                    <button class="btn btn-outline-secondary btn-sm py-0" id="zoomResetBtn" title="Reset zoom">⊙</button>
-                </div>
+                <span style="font-size:0.72rem; color:#5a7a9a; letter-spacing:0.06em; text-transform:uppercase;">
+                    Pipeline
+                </span>
+                <span class="text-muted" style="font-size:0.75rem;" id="blockCount">0 blocks</span>
             </div>
-            <div class="card-body p-0 position-relative" style="overflow:hidden;">
-                <svg id="builderCanvas" width="100%" height="100%"
-                     style="display:block; background: #f8f9fa; cursor:default;"
-                     xmlns="http://www.w3.org/2000/svg">
-                    <!-- Grid pattern: minor (20px) + major (100px) lines -->
-                    <defs>
-                        <pattern id="gridMinor" width="20" height="20" patternUnits="userSpaceOnUse">
-                            <path d="M 20 0 L 0 0 0 20 20 20 20 0" fill="none" stroke="#dee2e6" stroke-width="0.5"/>
-                        </pattern>
-                        <pattern id="gridMajor" width="100" height="100" patternUnits="userSpaceOnUse">
-                            <rect width="100" height="100" fill="url(#gridMinor)"/>
-                            <path d="M 100 0 L 0 0 0 100 100 100 100 0" fill="none" stroke="#ced4da" stroke-width="1"/>
-                        </pattern>
-                    </defs>
-                    <rect width="100%" height="100%" fill="url(#gridMajor)"/>
-                    <g id="canvasContent"></g>
-                </svg>
-                <!-- Drop hint -->
-                <div id="dropHint" class="position-absolute top-50 start-50 translate-middle text-center text-muted" style="pointer-events:none;">
-                    <i class="fas fa-mouse-pointer fa-3x mb-3 opacity-25"></i>
-                    <p class="mb-0">Drag components from the toolbox and drop them here</p>
-                    <p class="small opacity-50">Click a block to edit its properties</p>
+            <!-- Section columns scroll container -->
+            <div class="card-body p-2" style="overflow-x:auto; overflow-y:hidden; height:100%;">
+                <div id="pipelineContainer" class="d-flex gap-2 h-100">
+
+                    <div class="builder-section-col" data-section="structure">
+                        <div class="builder-section-header">
+                            <i class="fas fa-cubes me-1"></i>Structure
+                        </div>
+                        <div class="builder-block-list" id="section-structure" data-section="structure">
+                            <div class="builder-empty-hint">Drop Mesh &amp; Region here</div>
+                        </div>
+                    </div>
+
+                    <div class="builder-section-divider"></div>
+
+                    <div class="builder-section-col" data-section="physics">
+                        <div class="builder-section-header">
+                            <i class="fas fa-atom me-1"></i>Physics
+                        </div>
+                        <div class="builder-block-list" id="section-physics" data-section="physics">
+                            <div class="builder-empty-hint">Drop Doping &amp; Models here</div>
+                        </div>
+                    </div>
+
+                    <div class="builder-section-divider"></div>
+
+                    <div class="builder-section-col" data-section="contacts">
+                        <div class="builder-section-header">
+                            <i class="fas fa-plug me-1"></i>Contacts
+                        </div>
+                        <div class="builder-block-list" id="section-contacts" data-section="contacts">
+                            <div class="builder-empty-hint">Drop Electrode &amp; Contact here</div>
+                        </div>
+                    </div>
+
+                    <div class="builder-section-divider"></div>
+
+                    <div class="builder-section-col builder-section-col--wide" data-section="simulation">
+                        <div class="builder-section-header">
+                            <i class="fas fa-bolt me-1"></i>Simulation
+                        </div>
+                        <div class="builder-block-list" id="section-simulation" data-section="simulation">
+                            <div class="builder-empty-hint">Drop Solve &amp; Log here</div>
+                        </div>
+                    </div>
+
                 </div>
             </div>
         </div>
 
-        <!-- Deck Preview (collapsible) -->
-        <div class="card" style="max-height: 220px;">
-            <div class="card-header py-2 d-flex justify-content-between align-items-center" role="button"
-                 id="deckCollapseToggle" data-bs-toggle="collapse" data-bs-target="#builderDeckCollapse">
-                <small class="fw-bold text-muted text-uppercase">
+        <!-- Deck Preview -->
+        <div class="card" style="max-height:200px;">
+            <div class="card-header py-2 d-flex justify-content-between align-items-center"
+                 role="button" id="deckCollapseToggle"
+                 data-bs-toggle="collapse" data-bs-target="#builderDeckCollapse">
+                <span style="font-size:0.72rem; color:#5a7a9a; letter-spacing:0.06em; text-transform:uppercase;">
                     <i class="fas fa-file-code me-1"></i>PADRE Deck Preview
-                </small>
+                </span>
                 <div class="d-flex gap-2 align-items-center">
-                    <span class="badge bg-secondary small" id="builderDeckLines">0 lines</span>
-                    <button class="btn btn-xs btn-outline-primary" id="copyBuilderDeckBtn" style="font-size:0.72rem; padding:1px 6px;" onclick="event.stopPropagation()">
+                    <span class="badge bg-secondary" style="font-size:0.65rem;" id="builderDeckLines">0 lines</span>
+                    <button class="btn btn-outline-primary py-0 px-1" id="copyBuilderDeckBtn"
+                            style="font-size:0.68rem;" onclick="event.stopPropagation()">
                         <i class="fas fa-copy"></i>
                     </button>
-                    <i class="fas fa-chevron-down small"></i>
+                    <i class="fas fa-chevron-down" style="font-size:0.7rem; color:#5a7a9a;"></i>
                 </div>
             </div>
             <div class="collapse show" id="builderDeckCollapse">
                 <div class="card-body p-0">
-                    <div id="builderDeckStatus" class="p-3 text-muted small">
-                        <i class="fas fa-info-circle"></i> Add blocks and click "Preview Deck" to generate the PADRE input deck.
+                    <div id="builderDeckStatus" class="p-3 text-muted" style="font-size:0.8rem;">
+                        <i class="fas fa-info-circle me-1"></i>Add blocks and click "Preview Deck" to generate the PADRE input deck.
                     </div>
-                    <pre id="builderDeckContent" class="m-0 p-2" style="font-size:0.72rem; max-height:150px; overflow:auto; display:none;"></pre>
+                    <pre id="builderDeckContent" class="m-0 p-2"
+                         style="font-size:0.72rem; max-height:130px; overflow:auto; display:none;"></pre>
                 </div>
             </div>
         </div>
@@ -145,17 +174,17 @@
     </div>
 
     <!-- ③ Properties Panel -->
-    <div class="col-auto" style="width: 240px;">
+    <div class="col-auto" style="width:230px;">
         <div class="card h-100">
             <div class="card-header py-2">
-                <small class="fw-bold text-muted text-uppercase">
+                <span style="font-size:0.72rem; color:#5a7a9a; letter-spacing:0.06em; text-transform:uppercase;">
                     <i class="fas fa-sliders-h me-1"></i>Properties
-                </small>
+                </span>
             </div>
-            <div class="card-body p-2" style="overflow-y: auto;">
-                <div id="propertiesPlaceholder" class="text-muted small text-center py-4">
-                    <i class="fas fa-hand-pointer fa-2x mb-2 opacity-25"></i>
-                    <p class="mb-0">Select a block to edit its properties</p>
+            <div class="card-body p-2" style="overflow-y:auto;">
+                <div id="propertiesPlaceholder" class="text-muted text-center py-4" style="font-size:0.8rem;">
+                    <i class="fas fa-hand-pointer fa-2x mb-2 d-block opacity-25"></i>
+                    Select a block to edit its properties
                 </div>
                 <div id="propertiesForm" style="display:none;"></div>
                 <div id="propertiesActions" style="display:none;" class="mt-2 d-flex gap-2">
@@ -177,29 +206,30 @@
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title"><i class="fas fa-upload"></i> Upload PADRE Input Deck</h5>
+                <h6 class="modal-title"><i class="fas fa-upload me-2"></i>Upload PADRE Input Deck</h6>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
-                <p class="small text-muted">Paste an existing PADRE deck below or drag-and-drop a <code>.deck</code> / <code>.in</code> file. The deck will be loaded into the preview and can be run directly.</p>
-                <!-- File drop area -->
+                <p class="text-muted" style="font-size:0.82rem;">
+                    Paste an existing PADRE deck or drag-and-drop a <code>.deck</code> / <code>.in</code> file.
+                    The deck will be loaded into the preview and can be run directly.
+                </p>
                 <div id="deckDropArea" class="border rounded p-3 text-center text-muted mb-3"
                      style="border-style:dashed!important; cursor:pointer; transition:background .2s;"
                      onclick="document.getElementById('deckFileInput').click()">
-                    <i class="fas fa-file-import fa-2x mb-2 opacity-50"></i>
-                    <div class="small">Drop a <code>.deck</code> file here, or click to browse</div>
+                    <i class="fas fa-file-import fa-2x mb-2 d-block opacity-50"></i>
+                    <div style="font-size:0.82rem;">Drop a <code>.deck</code> file here, or click to browse</div>
                     <input type="file" id="deckFileInput" accept=".deck,.in,.txt" style="display:none">
                 </div>
-                <!-- Paste area -->
-                <label class="form-label small fw-bold">Or paste deck content:</label>
+                <label class="form-label">Or paste deck content:</label>
                 <textarea id="deckUploadText" class="form-control font-monospace"
                           rows="12" style="font-size:0.75rem;"
                           placeholder="  TITLE  My Simulation&#10;mesh rect nx=30 ny=30&#10;..."></textarea>
-                <div id="deckUploadFeedback" class="small mt-2"></div>
+                <div id="deckUploadFeedback" class="mt-2" style="font-size:0.8rem;"></div>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-primary" id="confirmUploadDeckBtn">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary btn-sm" id="confirmUploadDeckBtn">
                     <i class="fas fa-check"></i> Load Deck
                 </button>
             </div>
@@ -212,16 +242,16 @@
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title"><i class="fas fa-play"></i> Run Custom Simulation</h5>
+                <h6 class="modal-title"><i class="fas fa-play me-2"></i>Run Custom Simulation</h6>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
-                <p>This will submit your custom simulation to PADRE. Make sure the deck preview looks correct before running.</p>
-                <div id="runModalDeck" style="max-height:200px; overflow:auto; background:#f8f9fa; padding:8px; border-radius:4px; font-size:0.72rem; font-family:monospace;"></div>
+                <p style="font-size:0.85rem;">Make sure the deck preview looks correct before running.</p>
+                <pre id="runModalDeck" style="max-height:200px; overflow:auto; font-size:0.72rem;"></pre>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-success" id="confirmRunBtn">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-success btn-sm" id="confirmRunBtn">
                     <i class="fas fa-play"></i> Run
                 </button>
             </div>

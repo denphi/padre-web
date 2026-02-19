@@ -143,6 +143,9 @@ class SimulationStore:
 class DevicePreset:
     """Preset configurations for common devices."""
 
+    # 2D contour quantity choices (subset supported by all device factories)
+    CONTOUR_QUANTITIES = ['potential', 'doping', 'electrons', 'holes', 'e_field', 'qfn', 'qfp']
+
     PRESETS = {
         'pn_diode': {
             'label': 'PN Diode',
@@ -165,6 +168,16 @@ class DevicePreset:
                 'log_iv': True,
                 'log_bands_eq': True,
                 'log_bands_bias': True,
+                # 2D contour maps (not supported by pn_diode factory — greyed out in UI)
+                'contour_maps': False,
+                'contour_potential': True,
+                'contour_electrons': True,
+                'contour_holes': True,
+                'contour_e_field': False,
+                'contour_doping': True,
+                'contour_qfn': False,
+                'contour_qfp': False,
+                'contour_v_bias': 0.5,
             },
             'sweep': {
                 'forward_sweep_enabled': True,
@@ -174,6 +187,51 @@ class DevicePreset:
                 'reverse_sweep_enabled': False,
                 'reverse_v_start': 0.0,
                 'reverse_v_end': -5.0,
+                'reverse_v_step': -0.5,
+            }
+        },
+        'pin_diode': {
+            'label': 'PiN Diode',
+            'icon': 'fa-bolt',
+            'description': 'P-intrinsic-N junction diode with lightly-doped intrinsic region',
+            'parameters': {
+                'temperature': 300,
+                'p_doping': 1e18,
+                'i_doping': 1e13,
+                'n_doping': 1e18,
+                'length': 2.0,
+                'width': 1.0,
+                'p_width': 0.5,
+                'i_width': 1.0,
+                'n_width': 0.5,
+                'srh': True,
+                'conmob': True,
+                'fldmob': True,
+                'nx': 10,
+                'ny': 60,
+            },
+            'outputs': {
+                'log_iv': True,
+                'log_bands_eq': True,
+                'log_bands_bias': True,
+                'contour_maps': False,
+                'contour_potential': True,
+                'contour_electrons': True,
+                'contour_holes': True,
+                'contour_e_field': False,
+                'contour_doping': True,
+                'contour_qfn': False,
+                'contour_qfp': False,
+                'contour_v_bias': 0.5,
+            },
+            'sweep': {
+                'forward_sweep_enabled': True,
+                'forward_v_start': 0.0,
+                'forward_v_end': 1.0,
+                'forward_v_step': 0.05,
+                'reverse_sweep_enabled': False,
+                'reverse_v_start': 0.0,
+                'reverse_v_end': -10.0,
                 'reverse_v_step': -0.5,
             }
         },
@@ -195,6 +253,17 @@ class DevicePreset:
             },
             'outputs': {
                 'log_iv': True,
+                # 2D contour maps — supported by create_mosfet(contour_maps=True)
+                'contour_maps': False,
+                'contour_potential': True,
+                'contour_electrons': True,
+                'contour_holes': True,
+                'contour_e_field': False,
+                'contour_doping': True,
+                'contour_qfn': False,
+                'contour_qfp': False,
+                'contour_vgs_bias': 1.0,
+                'contour_vds_bias': 1.0,
             },
             'sweep': {
                 'vg_sweep_enabled': True,
@@ -225,6 +294,16 @@ class DevicePreset:
             'outputs': {
                 'log_iv': True,
                 'log_bands_eq': True,
+                # 2D contour maps — supported by create_mesfet(contour_maps=True)
+                'contour_maps': False,
+                'contour_potential': True,
+                'contour_electrons': True,
+                'contour_holes': False,
+                'contour_e_field': True,
+                'contour_doping': True,
+                'contour_qfn': False,
+                'contour_qfp': False,
+                'contour_vds_bias': 2.0,
             },
             'sweep': {
                 'vg_sweep_enabled': True,
@@ -254,6 +333,16 @@ class DevicePreset:
             'outputs': {
                 'log_cv': True,
                 'log_bands_eq': True,
+                # MOS cap factory does not expose contour_maps — disabled
+                'contour_maps': False,
+                'contour_potential': True,
+                'contour_electrons': True,
+                'contour_holes': True,
+                'contour_e_field': False,
+                'contour_doping': False,
+                'contour_qfn': False,
+                'contour_qfp': False,
+                'contour_vgs_bias': 1.0,
             },
             'sweep': {
                 'vg_sweep_enabled': True,
@@ -281,6 +370,17 @@ class DevicePreset:
             'outputs': {
                 'log_iv': True,
                 'log_bands_eq': True,
+                # 2D contour maps — supported by create_bjt(contour_maps=True)
+                'contour_maps': False,
+                'contour_potential': True,
+                'contour_electrons': True,
+                'contour_holes': True,
+                'contour_e_field': False,
+                'contour_doping': True,
+                'contour_qfn': False,
+                'contour_qfp': False,
+                'contour_vbe_bias': 0.7,
+                'contour_vce_bias': 2.0,
             },
             'sweep': {
                 'vbe_sweep_enabled': True,
@@ -309,6 +409,16 @@ class DevicePreset:
                 'log_iv': True,
                 'log_bands_eq': True,
                 'log_bands_bias': True,
+                # Schottky factory does not expose contour_maps — disabled
+                'contour_maps': False,
+                'contour_potential': True,
+                'contour_electrons': True,
+                'contour_holes': False,
+                'contour_e_field': True,
+                'contour_doping': False,
+                'contour_qfn': False,
+                'contour_qfp': False,
+                'contour_v_bias': 0.3,
             },
             'sweep': {
                 'forward_sweep_enabled': True,
@@ -368,6 +478,25 @@ class DevicePreset:
         # Mesh refinement
         'nx':                  'Number of mesh nodes in x-direction (keep nx×ny < 2500)',
         'ny':                  'Number of mesh nodes in y-direction (keep nx×ny < 2500)',
+        # PiN Diode specific
+        'i_doping':            'Intrinsic region background doping [cm⁻³] (ideally near ni ≈ 1e10)',
+        'p_width':             'Width of the P region [µm]',
+        'i_width':             'Width of the intrinsic (I) region [µm]',
+        'n_width':             'Width of the N region [µm]',
+        # 2D contour map outputs
+        'contour_maps':        'Enable 2D spatial map outputs (potential, carriers, field) at a bias point',
+        'contour_potential':   'Include 2D electrostatic potential map',
+        'contour_electrons':   'Include 2D electron concentration map',
+        'contour_holes':       'Include 2D hole concentration map',
+        'contour_e_field':     'Include 2D electric field magnitude map',
+        'contour_doping':      'Include 2D net doping map',
+        'contour_qfn':         'Include 2D electron quasi-Fermi level map',
+        'contour_qfp':         'Include 2D hole quasi-Fermi level map',
+        'contour_v_bias':      'Anode/forward bias voltage at which 2D maps are captured [V]',
+        'contour_vgs_bias':    'Gate voltage at which 2D maps are captured [V]',
+        'contour_vds_bias':    'Drain voltage at which 2D maps are captured [V]',
+        'contour_vbe_bias':    'Base-emitter voltage at which 2D maps are captured [V]',
+        'contour_vce_bias':    'Collector-emitter voltage at which 2D maps are captured [V]',
         # Output/sweep
         'log_iv':              'Save current-voltage (I-V) data to log file',
         'log_bands_eq':        'Save band diagram at equilibrium',

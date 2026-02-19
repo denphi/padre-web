@@ -332,15 +332,26 @@ function downloadDeck() {
 async function deleteSimulation() {
     if (!confirm('Are you sure you want to delete this simulation?')) return;
 
+    const btn = document.getElementById('deleteSimBtn');
+    const origHTML = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Deleting…';
+
     try {
         const result = await apiCall(`/api/simulation/${simId}`, 'DELETE');
 
         if (result.success) {
             showAlert('Simulation deleted!', 'success');
-            setTimeout(() => window.location.href = getBasePath() + '/', 1500);
+            setTimeout(() => window.location.href = getBasePath() + '/', 1000);
+        } else {
+            btn.disabled = false;
+            btn.innerHTML = origHTML;
+            showAlert(`Error: ${result.error || 'Could not delete simulation'}`, 'danger');
         }
     } catch (error) {
         console.error('Error deleting simulation:', error);
+        btn.disabled = false;
+        btn.innerHTML = origHTML;
         showAlert(`Error: ${error.message}`, 'danger');
     }
 }
