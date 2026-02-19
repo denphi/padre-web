@@ -243,6 +243,11 @@ function initControls() {
     document.getElementById('generateDeckBtn').addEventListener('click', generateDeck);
     document.getElementById('runBuilderBtn').addEventListener('click', showRunConfirm);
     document.getElementById('confirmRunBtn').addEventListener('click', runSimulation);
+    document.getElementById('uploadDeckBtn').addEventListener('click', () => {
+        new bootstrap.Modal(document.getElementById('uploadDeckModal')).show();
+    });
+    document.getElementById('confirmUploadDeckBtn').addEventListener('click', loadUploadedDeck);
+    initDeckDropArea();
 
     document.getElementById('zoomInBtn').addEventListener('click', () => {
         state.zoom = Math.min(3, state.zoom * 1.2);
@@ -610,11 +615,13 @@ async function runSimulation() {
     const name = document.getElementById('simNameBuilder').value || 'Custom Simulation';
     bootstrap.Modal.getInstance(document.getElementById('runConfirmModal')).hide();
 
+    // If we have a deck (either generated or uploaded), send it directly
+    const payload = builderDeckContent
+        ? { name, deck: builderDeckContent }
+        : { name, state: buildStatePayload() };
+
     try {
-        const result = await apiCall('/api/builder/run', 'POST', {
-            name,
-            state: buildStatePayload(),
-        });
+        const result = await apiCall('/api/builder/run', 'POST', payload);
 
         if (result.success) {
             showAlert('Simulation started!', 'success');
@@ -627,4 +634,67 @@ async function runSimulation() {
     } catch (e) {
         showAlert(`Error: ${e.message}`, 'danger');
     }
+}
+
+// ─────────────────────────────────────────────────────────
+// Upload / paste existing PADRE deck
+// ─────────────────────────────────────────────────────────
+
+function initDeckDropArea() {
+    const area  = document.getElementById('deckDropArea');
+    const input = document.getElementById('deckFileInput');
+    if (!area || !input) return;
+
+    area.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        area.style.background = '#e8f4fd';
+    });
+    area.addEventListener('dragleave', () => { area.style.background = ''; });
+    area.addEventListener('drop', (e) => {
+        e.preventDefault();
+        area.style.background = '';
+        const file = e.dataTransfer.files[0];
+        if (file) readDeckFile(file);
+    });
+    input.addEventListener('change', () => {
+        if (input.files[0]) readDeckFile(input.files[0]);
+    });
+}
+
+function readDeckFile(file) {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        document.getElementById('deckUploadText').value = e.target.result;
+        document.getElementById('deckUploadFeedback').innerHTML =
+            `<span class="text-success"><i class="fas fa-check"></i> Loaded: ${file.name} (${(file.size/1024).toFixed(1)} KB)</span>`;
+    };
+    reader.readAsText(file);
+}
+
+function loadUploadedDeck() {
+    const deckText = document.getElementById('deckUploadText').value.trim();
+    if (!deckText) {
+        document.getElementById('deckUploadFeedback').innerHTML =
+            '<span class="text-danger">Please paste or load a deck file first.</span>';
+        return;
+    }
+
+    // Push the deck straight into the preview panel and enable Run
+    builderDeckContent = deckText;
+    document.getElementById('builderDeckStatus').style.display = 'none';
+    document.getElementById('builderDeckContent').textContent = deckText;
+    document.getElementById('builderDeckContent').style.display = 'block';
+    document.getElementById('builderDeckLines').textContent = deckText.split('\n').length + ' lines';
+    document.getElementById('runBuilderBtn').disabled = false;
+
+    // Try to extract a TITLE line for the sim name
+    const titleMatch = deckText.match(/^\s*TITLE\s+(.+)/im);
+    if (titleMatch) {
+        const current = document.getElementById('simNameBuilder').value;
+        if (!current) document.getElementById('simNameBuilder').value = titleMatch[1].trim();
+    }
+
+    // Close modal
+    bootstrap.Modal.getInstance(document.getElementById('uploadDeckModal')).hide();
+    showAlert('Deck loaded — click "Run Simulation" to submit.', 'success');
 }

@@ -11,6 +11,9 @@
         <button class="btn btn-outline-secondary btn-sm" id="clearCanvasBtn" title="Clear canvas">
             <i class="fas fa-trash"></i> Clear
         </button>
+        <button class="btn btn-outline-info btn-sm" id="uploadDeckBtn" title="Upload existing PADRE deck">
+            <i class="fas fa-upload"></i> Upload Deck
+        </button>
         <button class="btn btn-outline-primary btn-sm" id="generateDeckBtn">
             <i class="fas fa-file-code"></i> Preview Deck
         </button>
@@ -92,13 +95,17 @@
                 <svg id="builderCanvas" width="100%" height="100%"
                      style="display:block; background: #f8f9fa; cursor:default;"
                      xmlns="http://www.w3.org/2000/svg">
-                    <!-- Grid pattern -->
+                    <!-- Grid pattern: minor (20px) + major (100px) lines -->
                     <defs>
-                        <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
-                            <path d="M 20 0 L 0 0 0 20" fill="none" stroke="#dee2e6" stroke-width="0.5"/>
+                        <pattern id="gridMinor" width="20" height="20" patternUnits="userSpaceOnUse">
+                            <path d="M 20 0 L 0 0 0 20 20 20 20 0" fill="none" stroke="#dee2e6" stroke-width="0.5"/>
+                        </pattern>
+                        <pattern id="gridMajor" width="100" height="100" patternUnits="userSpaceOnUse">
+                            <rect width="100" height="100" fill="url(#gridMinor)"/>
+                            <path d="M 100 0 L 0 0 0 100 100 100 100 0" fill="none" stroke="#ced4da" stroke-width="1"/>
                         </pattern>
                     </defs>
-                    <rect width="100%" height="100%" fill="url(#grid)"/>
+                    <rect width="100%" height="100%" fill="url(#gridMajor)"/>
                     <g id="canvasContent"></g>
                 </svg>
                 <!-- Drop hint -->
@@ -163,6 +170,41 @@
         </div>
     </div>
 
+</div>
+
+<!-- Upload Deck Modal -->
+<div class="modal fade" id="uploadDeckModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-upload"></i> Upload PADRE Input Deck</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p class="small text-muted">Paste an existing PADRE deck below or drag-and-drop a <code>.deck</code> / <code>.in</code> file. The deck will be loaded into the preview and can be run directly.</p>
+                <!-- File drop area -->
+                <div id="deckDropArea" class="border rounded p-3 text-center text-muted mb-3"
+                     style="border-style:dashed!important; cursor:pointer; transition:background .2s;"
+                     onclick="document.getElementById('deckFileInput').click()">
+                    <i class="fas fa-file-import fa-2x mb-2 opacity-50"></i>
+                    <div class="small">Drop a <code>.deck</code> file here, or click to browse</div>
+                    <input type="file" id="deckFileInput" accept=".deck,.in,.txt" style="display:none">
+                </div>
+                <!-- Paste area -->
+                <label class="form-label small fw-bold">Or paste deck content:</label>
+                <textarea id="deckUploadText" class="form-control font-monospace"
+                          rows="12" style="font-size:0.75rem;"
+                          placeholder="  TITLE  My Simulation&#10;mesh rect nx=30 ny=30&#10;..."></textarea>
+                <div id="deckUploadFeedback" class="small mt-2"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="confirmUploadDeckBtn">
+                    <i class="fas fa-check"></i> Load Deck
+                </button>
+            </div>
+        </div>
+    </div>
 </div>
 
 <!-- Run confirmation modal -->

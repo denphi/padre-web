@@ -41,9 +41,10 @@
 
     <footer class="footer mt-5 py-3 bg-light">
         <div class="container text-center text-muted">
-            <small>PADRE Web Application &copy; 2024. Powered by Flask and Bootstrap.</small>
+            <small>PADRE Web UI &copy; <span id="footerYear"></span>. Powered by <strong>PADRE</strong> &amp; <strong>nanoHUB</strong>.</small>
         </div>
     </footer>
+    <script>document.getElementById('footerYear').textContent = new Date().getFullYear();</script>
 
     <script src="{{ base_path }}{{ url_for('static', filename='js/vendor/bootstrap.bundle.min.js') }}"></script>
     <script src="{{ base_path }}{{ url_for('static', filename='js/vendor/chart.umd.min.js') }}"></script>

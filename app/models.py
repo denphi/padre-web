@@ -146,6 +146,7 @@ class DevicePreset:
     PRESETS = {
         'pn_diode': {
             'label': 'PN Diode',
+            'icon': 'fa-bolt',
             'description': 'Simple P-N junction diode',
             'parameters': {
                 'temperature': 300,
@@ -157,6 +158,8 @@ class DevicePreset:
                 'srh': True,
                 'conmob': True,
                 'fldmob': True,
+                'nx': 10,
+                'ny': 50,
             },
             'outputs': {
                 'log_iv': True,
@@ -176,6 +179,7 @@ class DevicePreset:
         },
         'mosfet': {
             'label': 'MOSFET',
+            'icon': 'fa-microchip',
             'description': 'Metal-Oxide-Semiconductor Field-Effect Transistor',
             'parameters': {
                 'device_type': 'nmos',
@@ -186,6 +190,8 @@ class DevicePreset:
                 'srh': True,
                 'conmob': True,
                 'fldmob': True,
+                'nx': 53,
+                'ny': 46,
             },
             'outputs': {
                 'log_iv': True,
@@ -203,6 +209,7 @@ class DevicePreset:
         },
         'mesfet': {
             'label': 'MESFET',
+            'icon': 'fa-broadcast-tower',
             'description': 'Metal-Semiconductor Field-Effect Transistor',
             'parameters': {
                 'device_type': 'nmesfet',
@@ -212,6 +219,8 @@ class DevicePreset:
                 'srh': True,
                 'conmob': True,
                 'fldmob': True,
+                'nx': 40,
+                'ny': 30,
             },
             'outputs': {
                 'log_iv': True,
@@ -230,6 +239,7 @@ class DevicePreset:
         },
         'mos_capacitor': {
             'label': 'MOS Capacitor',
+            'icon': 'fa-layer-group',
             'description': 'Metal-Oxide-Semiconductor Capacitor',
             'parameters': {
                 'temperature': 300,
@@ -238,6 +248,8 @@ class DevicePreset:
                 'substrate_type': 'p',
                 'conmob': True,
                 'fldmob': True,
+                'nx': 10,
+                'ny': 50,
             },
             'outputs': {
                 'log_cv': True,
@@ -252,6 +264,7 @@ class DevicePreset:
         },
         'bjt': {
             'label': 'BJT',
+            'icon': 'fa-project-diagram',
             'description': 'Bipolar Junction Transistor',
             'parameters': {
                 'device_type': 'npn',
@@ -262,6 +275,8 @@ class DevicePreset:
                 'collector_doping': 1e16,
                 'srh': True,
                 'conmob': True,
+                'nx': 10,
+                'ny': 155,
             },
             'outputs': {
                 'log_iv': True,
@@ -280,12 +295,15 @@ class DevicePreset:
         },
         'schottky_diode': {
             'label': 'Schottky Diode',
+            'icon': 'fa-circle-notch',
             'description': 'Metal-Semiconductor Junction Diode',
             'parameters': {
                 'temperature': 300,
                 'n_doping': 1e16,
                 'barrier_height': 0.7,
                 'length': 1.0,
+                'nx': 10,
+                'ny': 50,
             },
             'outputs': {
                 'log_iv': True,
@@ -303,36 +321,95 @@ class DevicePreset:
                 'reverse_v_step': -0.1,
             }
         },
-        'solar_cell': {
-            'label': 'Solar Cell',
-            'description': 'Photovoltaic Device',
-            'parameters': {
-                'temperature': 300,
-                'emitter_doping': 5e19,
-                'base_doping': 5e16,
-                'base_width': 100.0,
-                'srh': True,
-                'conmob': True,
-            },
-            'outputs': {
-                'log_iv': True,
-                'log_bands_eq': True,
-            },
-            'sweep': {
-                'illumination_enabled': True,
-                'v_sweep_enabled': True,
-                'v_start': 0.0,
-                'v_end': 0.7,
-                'v_step': 0.02,
-            }
-        },
     }
-    
+
+    # Human-readable descriptions for each parameter (used as tooltips in UI)
+    PARAM_DESCRIPTIONS = {
+        'temperature':         'Lattice temperature in Kelvin (default 300 K = 27 °C)',
+        'srh':                 'Enable Shockley-Read-Hall recombination model',
+        'auger':               'Enable Auger recombination (important at high doping)',
+        'bgn':                 'Enable Band-Gap Narrowing at heavy doping',
+        'conmob':              'Enable concentration-dependent carrier mobility model',
+        'fldmob':              'Enable field-dependent (velocity saturation) mobility model',
+        'newton':              'Use Newton solver instead of Gummel iteration',
+        'p_doping':            'P-type (acceptor) doping concentration [cm⁻³]',
+        'n_doping':            'N-type (donor) doping concentration [cm⁻³]',
+        'junction_position':   'Fractional position of PN junction along the device length (0–1)',
+        'length':              'Device length in the x-direction [µm]',
+        'width':               'Device depth/width in the y-direction [µm]',
+        'channel_length':      'MOSFET gate/channel length [µm]',
+        'channel_width':       'Device width perpendicular to current flow [µm]',
+        'gate_oxide_thickness':'Thickness of the gate dielectric (SiO₂) [µm]',
+        'oxide_thickness':     'Thickness of the gate oxide / insulator [µm]',
+        'substrate_doping':    'Background doping of the substrate [cm⁻³]',
+        'channel_doping':      'Active channel doping [cm⁻³]',
+        'substrate_type':      'Substrate polarity: "p" for p-type, "n" for n-type',
+        'device_type':         'Sub-type of the device (e.g. nmos/pmos, npn/pnp)',
+        'base_width':          'Width of the BJT base region [µm]',
+        'base_doping':         'Base region doping concentration [cm⁻³]',
+        'emitter_doping':      'Emitter region doping concentration [cm⁻³]',
+        'collector_doping':    'Collector region doping concentration [cm⁻³]',
+        'emitter_width':       'Width of the emitter region [µm]',
+        'collector_width':     'Width of the collector region [µm]',
+        'emitter_depth':       'Depth (y) of the emitter contact region [µm]',
+        'base_thickness':      'Thickness of the base layer in the y-direction [µm]',
+        'barrier_height':      'Schottky barrier height at the metal-semiconductor interface [eV]',
+        'n_doping':            'Donor (n-type) doping concentration in the semiconductor [cm⁻³]',
+        'gate_workfunction':   'Metal gate work function [eV] — controls flat-band voltage',
+        'gate_length':         'Physical length of the gate metal [µm]',
+        'gate_doping':         'Doping of a polysilicon gate (if used) [cm⁻³]',
+        'junction_depth':      'Depth of the source/drain junction below the oxide [µm]',
+        'contact_doping':      'Highly-doped contact regions at source and drain [cm⁻³]',
+        'source_drain_doping': 'Doping level for source and drain implant regions [cm⁻³]',
+        'channel_depth':       'Depth of the conductive channel below the gate [µm]',
+        'substrate_depth':     'Total device depth in the y-direction [µm]',
+        'device_depth':        'Total device depth in the y-direction [µm]',
+        'device_width':        'Device extent in the x-direction [µm]',
+        # Mesh refinement
+        'nx':                  'Number of mesh nodes in x-direction (keep nx×ny < 2500)',
+        'ny':                  'Number of mesh nodes in y-direction (keep nx×ny < 2500)',
+        # Output/sweep
+        'log_iv':              'Save current-voltage (I-V) data to log file',
+        'log_bands_eq':        'Save band diagram at equilibrium',
+        'log_bands_bias':      'Save band diagram under applied bias',
+        'log_cv':              'Save capacitance-voltage (C-V) data to log file',
+        'forward_sweep_enabled': 'Enable forward-bias voltage sweep',
+        'forward_v_start':     'Start voltage for forward sweep [V]',
+        'forward_v_end':       'End voltage for forward sweep [V]',
+        'forward_v_step':      'Step size for forward voltage sweep [V]',
+        'reverse_sweep_enabled': 'Enable reverse-bias voltage sweep',
+        'reverse_v_start':     'Start voltage for reverse sweep [V]',
+        'reverse_v_end':       'End voltage for reverse sweep [V]',
+        'reverse_v_step':      'Step size for reverse voltage sweep [V]',
+        'vg_sweep_enabled':    'Enable gate voltage sweep',
+        'vg_start':            'Gate voltage sweep start [V]',
+        'vg_end':              'Gate voltage sweep end [V]',
+        'vg_step':             'Gate voltage step size [V]',
+        'vd_sweep_enabled':    'Enable drain voltage sweep',
+        'vd_start':            'Drain voltage sweep start [V]',
+        'vd_end':              'Drain voltage sweep end [V]',
+        'vd_step':             'Drain voltage step size [V]',
+        'vbe_sweep_enabled':   'Enable base-emitter voltage sweep',
+        'vbe_start':           'VBE sweep start voltage [V]',
+        'vbe_end':             'VBE sweep end voltage [V]',
+        'vbe_step':            'VBE sweep step size [V]',
+        'vce_sweep_enabled':   'Enable collector-emitter voltage sweep',
+        'vce_start':           'VCE sweep start voltage [V]',
+        'vce_end':             'VCE sweep end voltage [V]',
+        'vce_step':            'VCE sweep step size [V]',
+    }
+
     @classmethod
     def get_preset(cls, device_type: str) -> Optional[Dict[str, Any]]:
         """Get preset configuration for a device type."""
-        return cls.PRESETS.get(device_type)
-    
+        preset = cls.PRESETS.get(device_type)
+        if preset is None:
+            return None
+        # Attach per-parameter descriptions
+        result = dict(preset)
+        result['param_descriptions'] = cls.PARAM_DESCRIPTIONS
+        return result
+
     @classmethod
     def list_presets(cls) -> List[Dict[str, Any]]:
         """List all available presets."""
@@ -340,6 +417,7 @@ class DevicePreset:
             {
                 'id': key,
                 'label': value['label'],
+                'icon': value.get('icon', 'fa-microchip'),
                 'description': value['description'],
             }
             for key, value in cls.PRESETS.items()

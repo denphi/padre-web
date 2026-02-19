@@ -768,17 +768,18 @@ def builder_run():
         if not data:
             return jsonify({'success': False, 'error': 'No data provided'}), 400
 
-        name = data.get('name', 'Custom Simulation')
-        state = data.get('state', data)
+        name  = data.get('name', 'Custom Simulation')
+        deck  = data.get('deck')   # pre-built deck string (upload case)
+        state = data.get('state')  # canvas state JSON (builder case)
 
         sim_id = str(uuid.uuid4())[:8]
-        store = get_simulation_store()
+        store  = get_simulation_store()
 
         sim = Simulation(
             sim_id=sim_id,
             name=name,
             device_type='custom',
-            parameters={'builder_state': state}
+            parameters={'builder_state': state or {}}
         )
         store.add(sim)
 
@@ -788,9 +789,10 @@ def builder_run():
 
         runner = _BuilderSimulationRunner(
             simulation_id=sim_id,
-            state=state,
+            state=state or {},
             output_dir=output_dir,
-            progress_callback=lambda prog, msg: _on_simulation_progress(sim_id, prog, msg)
+            progress_callback=lambda prog, msg: _on_simulation_progress(sim_id, prog, msg),
+            prebuilt_deck=deck,      # pass the raw deck text if provided
         )
         _running_simulations[sim_id] = runner
         runner.start()
@@ -992,11 +994,12 @@ def _build_deck_from_state(state):
 class _BuilderSimulationRunner:
     """Thin runner for builder-created simulations."""
 
-    def __init__(self, simulation_id, state, output_dir, progress_callback=None):
+    def __init__(self, simulation_id, state, output_dir, progress_callback=None, prebuilt_deck=None):
         self.simulation_id = simulation_id
         self.state = state
         self.output_dir = output_dir
         self.progress_callback = progress_callback
+        self.prebuilt_deck = prebuilt_deck   # raw deck string from upload, or None
         self.thread = None
         self.is_running = False
         self.error = None
@@ -1017,9 +1020,13 @@ class _BuilderSimulationRunner:
         import traceback
         try:
             self._update_progress(5, "Initializing builder simulation...")
-            deck = _build_deck_from_state(self.state)
+            if self.prebuilt_deck:
+                deck = self.prebuilt_deck
+                self._update_progress(25, "Using uploaded deck")
+            else:
+                deck = _build_deck_from_state(self.state)
+                self._update_progress(25, "Deck generated")
             self.deck_content = deck
-            self._update_progress(25, "Deck generated")
 
             deck_file = os.path.join(self.output_dir, "padre_input.deck")
             with open(deck_file, 'w') as f:

@@ -1,194 +1,238 @@
-/* Device Configuration Page Logic — with interactive SVG schematic */
+/* Device Configuration Page — interactive SVG, tabbed UI, sci-notation support */
 
-let selectedPreset = null;
-let deckFullscreenModal;
+let selectedPreset = null;           // full preset object from API
+let paramDescriptions = {};          // { paramName: 'tooltip text' }
 let currentDeckContent = '';
 let deckUpdateDebounceTimer = null;
 let schematicDebounceTimer = null;
 const DEBOUNCE_MS = 500;
-
-// Currently active inline editor state
 let _editingParam = null;
+let deckFullscreenModal;
+
+// ─────────────────────────────────────────────────────────
+// Bootstrap init
+// ─────────────────────────────────────────────────────────
 
 document.addEventListener('DOMContentLoaded', () => {
     deckFullscreenModal = new bootstrap.Modal(document.getElementById('deckFullscreenModal'));
     loadPresets();
-    setupFormHandlers();
     setupDeckPreviewHandlers();
     setupParamEditor();
+    setupFormSubmit();
+
+    document.getElementById('backToGridBtn').addEventListener('click', showGrid);
+    document.getElementById('autoNameBtn').addEventListener('click', autoGenerateName);
+    document.getElementById('refreshDeckBtn').addEventListener('click', generateDeckPreview);
 });
 
 // ─────────────────────────────────────────────────────────
-// Presets
+// Device grid (initial view)
 // ─────────────────────────────────────────────────────────
 
 async function loadPresets() {
     try {
         const result = await apiCall('/api/devices/presets');
-        if (result.success) {
-            renderPresets(result.presets);
-        }
-    } catch (error) {
-        console.error('Error loading presets:', error);
-        showAlert('Failed to load device presets', 'danger');
+        if (result.success) renderDeviceGrid(result.presets);
+    } catch (err) {
+        document.getElementById('deviceCards').innerHTML =
+            `<div class="alert alert-danger">Failed to load devices: ${err.message}</div>`;
     }
 }
 
-function renderPresets(presets) {
-    const container = document.getElementById('devicePresets');
-    container.innerHTML = presets.map(preset => `
-        <button type="button" class="list-group-item list-group-item-action text-start py-2 px-3"
-                data-preset-id="${preset.id}"
-                onclick="selectPreset('${preset.id}', '${preset.label}')">
-            <div class="fw-bold small">${preset.label}</div>
-            <div class="text-muted" style="font-size:0.72rem">${preset.description}</div>
-        </button>
-    `).join('');
-
-    const select = document.getElementById('deviceType');
-    select.innerHTML = '<option value="">Select a device type…</option>' +
-        presets.map(p => `<option value="${p.id}">${p.label}</option>`).join('');
+function renderDeviceGrid(presets) {
+    const container = document.getElementById('deviceCards');
+    container.innerHTML = `<div class="row g-3">` +
+        presets.map(p => `
+            <div class="col-6 col-sm-4 col-md-3 col-lg-2">
+                <div class="card h-100 device-card shadow-sm"
+                     style="cursor:pointer; transition:transform .15s, box-shadow .15s;"
+                     onclick="selectPreset('${p.id}', '${p.label}')"
+                     onmouseenter="this.style.transform='translateY(-3px)';this.style.boxShadow='0 6px 16px rgba(0,0,0,.15)'"
+                     onmouseleave="this.style.transform='';this.style.boxShadow=''">
+                    <div class="card-body text-center py-4">
+                        <i class="fas ${p.icon || 'fa-microchip'} fa-2x mb-2 text-primary"></i>
+                        <div class="fw-bold small">${p.label}</div>
+                        <div class="text-muted mt-1" style="font-size:0.72rem;">${p.description}</div>
+                    </div>
+                </div>
+            </div>
+        `).join('') + `</div>`;
 }
+
+function showGrid() {
+    document.getElementById('deviceGrid').style.display = '';
+    document.getElementById('deviceWorkspace').style.display = 'none';
+    selectedPreset = null;
+}
+
+// ─────────────────────────────────────────────────────────
+// Preset selection → enter workspace
+// ─────────────────────────────────────────────────────────
 
 async function selectPreset(deviceType, label) {
     try {
-        document.getElementById('deviceType').value = deviceType;
-
-        document.querySelectorAll('#devicePresets .list-group-item').forEach(item => {
-            item.classList.toggle('active', item.dataset.presetId === deviceType);
-        });
-
         const result = await apiCall(`/api/devices/presets/${deviceType}`);
-        if (result.success) {
-            selectedPreset = result.preset;
-            renderParameterForm(deviceType, result.preset);
-            document.getElementById('submitBtn').disabled = false;
-            document.getElementById('refreshDeckBtn').disabled = false;
-            document.getElementById('svgHint').style.display = '';
+        if (!result.success) { showAlert('Failed to load preset', 'danger'); return; }
 
-            // Fetch schematic + deck preview together
-            refreshSchematic();
-            if (document.getElementById('autoUpdateDeck').checked) {
-                generateDeckPreview();
-            }
-        }
-    } catch (error) {
-        console.error('Error selecting preset:', error);
-        showAlert('Failed to load preset', 'danger');
+        selectedPreset = result.preset;
+        paramDescriptions = result.preset.param_descriptions || {};
+
+        // Show workspace, hide grid
+        document.getElementById('deviceGrid').style.display = 'none';
+        document.getElementById('deviceWorkspace').style.display = '';
+        document.getElementById('workspaceDeviceLabel').textContent = label;
+        document.getElementById('submitBtn').disabled = false;
+        document.getElementById('refreshDeckBtn').disabled = false;
+        document.getElementById('svgHint').style.display = '';
+
+        // Populate tabs
+        renderTabParameters(deviceType, result.preset);
+
+        // Auto-generate simulation name
+        autoGenerateName();
+
+        // Fetch schematic + deck preview
+        refreshSchematic();
+        if (document.getElementById('autoUpdateDeck').checked) generateDeckPreview();
+
+    } catch (err) {
+        showAlert(`Error: ${err.message}`, 'danger');
     }
 }
 
 // ─────────────────────────────────────────────────────────
-// Parameter form
+// Tab-based parameter rendering
 // ─────────────────────────────────────────────────────────
 
-function renderParameterForm(deviceType, preset) {
-    const container = document.getElementById('parametersContainer');
-    const parameters = preset.parameters || {};
-    const outputs = preset.outputs || {};
-    const sweep = preset.sweep || {};
+// Which keys go to which tab
+const TAB_PHYSICS   = ['temperature','srh','auger','bgn','conmob','fldmob','newton','device_type','substrate_type'];
+const TAB_STRUCTURE = [
+    'p_doping','n_doping','junction_position','length','width',
+    'channel_length','channel_width','gate_oxide_thickness','oxide_thickness',
+    'substrate_doping','source_drain_doping','channel_doping','contact_doping',
+    'base_width','base_doping','emitter_doping','collector_doping',
+    'emitter_width','collector_width','emitter_depth','base_thickness',
+    'barrier_height','gate_workfunction','gate_doping','gate_length',
+    'junction_depth','channel_depth','substrate_depth','device_depth','device_width',
+];
+const TAB_MESH      = ['nx','ny'];
+const TAB_SWEEP     = [
+    'forward_sweep_enabled','forward_v_start','forward_v_end','forward_v_step',
+    'reverse_sweep_enabled','reverse_v_start','reverse_v_end','reverse_v_step',
+    'vg_sweep_enabled','vg_start','vg_end','vg_step',
+    'vd_sweep_enabled','vd_start','vd_end','vd_step',
+    'vbe_sweep_enabled','vbe_start','vbe_end','vbe_step',
+    'vce_sweep_enabled','vce_start','vce_end','vce_step',
+];
 
-    let html = '';
-    const categories = categorizeParameters(parameters);
+function renderTabParameters(deviceType, preset) {
+    const params  = preset.parameters  || {};
+    const outputs = preset.outputs     || {};
+    const sweep   = preset.sweep       || {};
 
-    for (const [category, params] of Object.entries(categories)) {
-        html += `<div class="parameter-group mb-2">
-                    <h6 class="small text-uppercase text-muted mb-1">${category}</h6>`;
-        for (const [key, value] of Object.entries(params)) {
-            html += renderInputField(`param_${key}`, key, value);
-        }
-        html += '</div>';
+    // Classify each param key into a tab bucket
+    const buckets = { physics: {}, structure: {}, mesh: {}, sweep: {}, other: {} };
+
+    for (const [k, v] of Object.entries(params)) {
+        if (TAB_MESH.includes(k))          buckets.mesh[k] = v;
+        else if (TAB_PHYSICS.includes(k))   buckets.physics[k] = v;
+        else if (TAB_STRUCTURE.includes(k)) buckets.structure[k] = v;
+        else                                buckets.other[k] = v;
     }
+    for (const [k, v] of Object.entries(sweep)) buckets.sweep[k] = v;
 
-    if (Object.keys(outputs).length > 0) {
-        html += `<div class="parameter-group mb-2">
-                    <h6 class="small text-uppercase text-muted mb-1">Output Logging</h6>`;
-        for (const [key, value] of Object.entries(outputs)) {
-            html += renderInputField(`output_${key}`, key, value);
-        }
-        html += '</div>';
-    }
+    document.getElementById('paramsPhysics').innerHTML   = renderParamGroup('param', {...buckets.physics, ...buckets.other});
+    document.getElementById('paramsDoping').innerHTML    = renderParamGroup('param', buckets.structure);
+    document.getElementById('paramsOutputs').innerHTML   = renderParamGroup('output', outputs);
+    document.getElementById('paramsSweep').innerHTML     = renderParamGroup('sweep', buckets.sweep);
 
-    if (Object.keys(sweep).length > 0) {
-        html += `<div class="parameter-group mb-2">
-                    <h6 class="small text-uppercase text-muted mb-1">Voltage Sweep</h6>`;
-        for (const [key, value] of Object.entries(sweep)) {
-            html += renderInputField(`sweep_${key}`, key, value);
-        }
-        html += '</div>';
-    }
+    // Mesh tab
+    document.getElementById('meshInputs').innerHTML = renderParamGroup('param', buckets.mesh);
+    updateMeshCount();
 
-    container.innerHTML = html;
-
+    // Attach change listeners
     document.querySelectorAll('.param-input').forEach(input => {
         input.addEventListener('change', onParameterChange);
-        input.addEventListener('input', onParameterChange);
+        input.addEventListener('input',  onParameterChange);
+    });
+    // Mesh count updater
+    document.querySelectorAll('[id="param_nx"],[id="param_ny"]').forEach(el => {
+        el.addEventListener('input', updateMeshCount);
     });
 }
 
+function updateMeshCount() {
+    const nxEl = document.getElementById('param_nx');
+    const nyEl = document.getElementById('param_ny');
+    if (!nxEl || !nyEl) return;
+    const nx = parseInt(nxEl.value) || 0;
+    const ny = parseInt(nyEl.value) || 0;
+    const total = nx * ny;
+    const countEl = document.getElementById('meshNodeCount');
+    countEl.innerHTML = `Total nodes: <strong>${total.toLocaleString()}</strong>` +
+        (total > 2500 ? ' <span class="text-danger"><i class="fas fa-exclamation-triangle"></i> Exceeds safe limit!</span>' :
+                        ' <span class="text-success"><i class="fas fa-check"></i> OK</span>');
+}
+
+function renderParamGroup(prefix, params) {
+    if (!params || Object.keys(params).length === 0)
+        return '<p class="text-muted small py-2 px-1"><i class="fas fa-check-circle text-success"></i> No parameters in this category.</p>';
+    return Object.entries(params).map(([key, value]) => renderInputField(`${prefix}_${key}`, key, value)).join('');
+}
+
 function renderInputField(inputId, key, value) {
-    const label = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-    const inputType = typeof value === 'number' ? 'number' :
-                     typeof value === 'boolean' ? 'checkbox' : 'text';
+    const label  = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+    const desc   = paramDescriptions[key] || '';
+    const tooltip = desc ? ` title="${desc.replace(/"/g,"'")}"` : '';
+    const descHtml = desc
+        ? `<div class="text-muted" style="font-size:0.68rem; line-height:1.3; margin-top:1px;">${desc}</div>`
+        : '';
 
-    if (inputType === 'checkbox') {
+    if (typeof value === 'boolean') {
         return `
-            <div class="form-check mb-1">
-                <input class="form-check-input param-input" type="checkbox" id="${inputId}"
-                       ${value ? 'checked' : ''}>
-                <label class="form-check-label small" for="${inputId}">${label}</label>
-            </div>
-        `;
+        <div class="form-check mb-2">
+            <input class="form-check-input param-input" type="checkbox" id="${inputId}" ${value ? 'checked' : ''}>
+            <label class="form-check-label small" for="${inputId}"${tooltip}>
+                ${label}
+                ${desc ? `<i class="fas fa-info-circle text-muted ms-1" style="font-size:0.7rem;" title="${desc.replace(/"/g,"'")}"></i>` : ''}
+            </label>
+            ${descHtml}
+        </div>`;
     }
+
+    // Detect if the value looks like a scientific-notation doping number
+    const isSci = typeof value === 'number' && (Math.abs(value) >= 1e4 || (Math.abs(value) < 1e-2 && value !== 0));
+    const displayVal = isSci ? value.toExponential() : (value ?? '');
+
     return `
-        <div class="mb-1">
-            <label for="${inputId}" class="form-label small mb-0">${label}</label>
-            <input class="form-control form-control-sm param-input" type="${inputType}"
-                   id="${inputId}" value="${value ?? ''}"
-                   ${inputType === 'number' ? 'step="any"' : ''}>
-        </div>
-    `;
+    <div class="mb-2">
+        <label for="${inputId}" class="form-label small mb-0"${tooltip}>
+            ${label}
+            ${desc ? `<i class="fas fa-info-circle text-muted ms-1" style="font-size:0.7rem;" title="${desc.replace(/"/g,"'")}"></i>` : ''}
+        </label>
+        ${descHtml}
+        <input class="form-control form-control-sm param-input${isSci ? ' sci-input' : ''}"
+               type="text" id="${inputId}" value="${displayVal}"
+               placeholder="${isSci ? 'e.g. 1e17' : ''}">
+    </div>`;
 }
 
-function onParameterChange() {
-    if (document.getElementById('autoUpdateDeck').checked) {
-        clearTimeout(deckUpdateDebounceTimer);
-        deckUpdateDebounceTimer = setTimeout(generateDeckPreview, DEBOUNCE_MS);
-    }
-    clearTimeout(schematicDebounceTimer);
-    schematicDebounceTimer = setTimeout(refreshSchematic, DEBOUNCE_MS);
+// ─────────────────────────────────────────────────────────
+// Parameter value reading — supports scientific notation strings
+// ─────────────────────────────────────────────────────────
+
+function parseSciValue(str) {
+    if (typeof str !== 'string') return str;
+    const trimmed = str.trim();
+    const num = Number(trimmed);    // handles '1e17', '1.5e-3', '300', etc.
+    return isNaN(num) ? trimmed : num;
 }
 
-function categorizeParameters(params) {
-    const categories = {
-        'Temperature & Physics': {},
-        'Doping & Structure': {},
-        'Advanced Options': {}
-    };
-
-    const tempPhysics = ['temperature', 'srh', 'auger', 'conmob', 'fldmob', 'bgn', 'newton'];
-    const dopingStructure = [
-        'doping_p', 'doping_n', 'junction_depth', 'channel_length', 'channel_width',
-        'oxide_thickness', 'substrate_doping', 'source_drain_doping', 'base_width',
-        'gate_doping', 'emitter_doping', 'collector_doping', 'barrier_height',
-        'semiconductor_doping', 'p_doping', 'n_doping', 'junction_position',
-        'length', 'width', 'device_width', 'device_depth', 'gate_oxide_thickness',
-        'channel_doping', 'emitter_width', 'collector_width', 'base_doping',
-        'emitter_depth', 'base_thickness', 'channel_depth', 'substrate_depth',
-        'gate_length', 'contact_doping', 'gate_workfunction',
-    ];
-
-    for (const [key, value] of Object.entries(params)) {
-        if (tempPhysics.includes(key)) {
-            categories['Temperature & Physics'][key] = value;
-        } else if (dopingStructure.includes(key)) {
-            categories['Doping & Structure'][key] = value;
-        } else {
-            categories['Advanced Options'][key] = value;
-        }
-    }
-
-    return Object.fromEntries(Object.entries(categories).filter(([_, v]) => Object.keys(v).length > 0));
+function getInputValue(input) {
+    if (input.type === 'checkbox') return input.checked;
+    const raw = input.value.trim();
+    if (raw === '') return null;
+    return parseSciValue(raw);
 }
 
 function collectParameters() {
@@ -205,45 +249,60 @@ function collectParameters() {
     return parameters;
 }
 
-function getInputValue(input) {
-    if (input.type === 'checkbox') return input.checked;
-    if (input.type === 'number') return input.value ? parseFloat(input.value) : null;
-    return input.value || null;
+// ─────────────────────────────────────────────────────────
+// Auto-generate simulation name
+// ─────────────────────────────────────────────────────────
+
+function autoGenerateName() {
+    if (!selectedPreset) return;
+    const label = document.getElementById('workspaceDeviceLabel').textContent || 'Device';
+    const ts = new Date();
+    const stamp = `${ts.getMonth()+1}/${ts.getDate()} ${ts.getHours()}:${String(ts.getMinutes()).padStart(2,'0')}`;
+    // Try to grab one key param value for the name
+    let keyParam = '';
+    const nxEl = document.getElementById('param_nx');
+    const clEl  = document.getElementById('param_channel_length');
+    if (clEl)  keyParam = ` L=${clEl.value}µm`;
+    document.getElementById('simName').value = `${label}${keyParam} – ${stamp}`;
 }
 
 // ─────────────────────────────────────────────────────────
-// Interactive SVG Schematic
+// Debounced change handler
+// ─────────────────────────────────────────────────────────
+
+function onParameterChange() {
+    if (document.getElementById('autoUpdateDeck').checked) {
+        clearTimeout(deckUpdateDebounceTimer);
+        deckUpdateDebounceTimer = setTimeout(generateDeckPreview, DEBOUNCE_MS);
+    }
+    clearTimeout(schematicDebounceTimer);
+    schematicDebounceTimer = setTimeout(refreshSchematic, DEBOUNCE_MS);
+}
+
+// ─────────────────────────────────────────────────────────
+// Interactive SVG schematic
 // ─────────────────────────────────────────────────────────
 
 async function refreshSchematic() {
-    const deviceType = document.getElementById('deviceType').value;
+    const deviceType = document.getElementById('workspaceDeviceLabel').dataset.deviceType;
     if (!deviceType) return;
 
     const params = collectParameters();
-    // Build query string — only pass numeric/string geometry params
-    const qs = new URLSearchParams();
-    qs.set('interactive', 'true');
+    const qs = new URLSearchParams({ interactive: 'true' });
     for (const [k, v] of Object.entries(params)) {
-        if (v !== null && v !== undefined && typeof v !== 'boolean') {
-            qs.set(k, v);
-        }
+        if (v !== null && v !== undefined && typeof v !== 'boolean') qs.set(k, v);
     }
 
     document.getElementById('schematicPlaceholder').style.display = 'none';
-    document.getElementById('schematicSvgWrapper').style.display = 'none';
-    document.getElementById('schematicLoading').style.display = 'block';
+    document.getElementById('schematicSvgWrapper').style.display  = 'none';
+    document.getElementById('schematicLoading').style.display     = 'block';
 
     try {
         const result = await apiCall(`/api/devices/schematic/${deviceType}?${qs.toString()}`);
         if (result.success) {
-            const wrapper = document.getElementById('schematicSvg');
-            wrapper.innerHTML = result.svg;
-            // Make SVG responsive
-            const svgEl = wrapper.querySelector('svg');
-            if (svgEl) {
-                svgEl.style.maxWidth = '100%';
-                svgEl.style.height = 'auto';
-            }
+            document.getElementById('schematicSvg').innerHTML = result.svg;
+            const svgEl = document.getElementById('schematicSvg').querySelector('svg');
+            if (svgEl) { svgEl.style.maxWidth = '100%'; svgEl.style.height = 'auto'; }
             attachParamLabelHandlers();
             document.getElementById('schematicSvgWrapper').style.display = 'block';
         } else {
@@ -258,75 +317,65 @@ async function refreshSchematic() {
 }
 
 function attachParamLabelHandlers() {
-    const svgContainer = document.getElementById('schematicSvg');
-    svgContainer.querySelectorAll('.param-label').forEach(el => {
+    document.getElementById('schematicSvg').querySelectorAll('.param-label').forEach(el => {
         el.style.cursor = 'pointer';
-        el.addEventListener('click', (e) => {
-            e.stopPropagation();
-            openParamEditor(el, e);
-        });
+        el.addEventListener('click', (e) => { e.stopPropagation(); openParamEditor(el, e); });
     });
 }
 
 function openParamEditor(labelEl, mouseEvent) {
-    const paramName = labelEl.dataset.param;
-    const currentValue = parseFloat(labelEl.dataset.value) || 0;
+    const paramName   = labelEl.dataset.param;
+    const currentVal  = labelEl.dataset.value;
 
     _editingParam = paramName;
 
     const overlay = document.getElementById('paramEditOverlay');
-    const input = document.getElementById('paramEditInput');
-    const lbl = document.getElementById('paramEditLabel');
+    const input   = document.getElementById('paramEditInput');
+    const lbl     = document.getElementById('paramEditLabel');
+    const descEl  = document.getElementById('paramEditDesc');
 
-    lbl.textContent = paramName.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-    input.value = currentValue;
+    lbl.textContent    = paramName.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+    descEl.textContent = paramDescriptions[paramName] || '';
+    input.value        = currentVal;
 
-    // Position the overlay near the click
     const wrapperRect = document.getElementById('schematicSvgWrapper').getBoundingClientRect();
     const clickX = mouseEvent.clientX - wrapperRect.left + document.getElementById('schematicSvgWrapper').scrollLeft;
-    const clickY = mouseEvent.clientY - wrapperRect.top + document.getElementById('schematicSvgWrapper').scrollTop;
-    overlay.style.left = Math.min(clickX, wrapperRect.width - 180) + 'px';
-    overlay.style.top = (clickY + 10) + 'px';
+    const clickY = mouseEvent.clientY - wrapperRect.top  + document.getElementById('schematicSvgWrapper').scrollTop;
+    overlay.style.left    = Math.min(clickX, wrapperRect.width - 200) + 'px';
+    overlay.style.top     = (clickY + 10) + 'px';
     overlay.style.display = 'block';
 
-    setTimeout(() => input.focus(), 50);
+    setTimeout(() => { input.focus(); input.select(); }, 50);
 }
 
 function setupParamEditor() {
     document.getElementById('paramEditApply').addEventListener('click', applyParamEdit);
     document.getElementById('paramEditCancel').addEventListener('click', closeParamEditor);
     document.getElementById('paramEditInput').addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') applyParamEdit();
+        if (e.key === 'Enter')  applyParamEdit();
         if (e.key === 'Escape') closeParamEditor();
     });
-    // Click outside to close
-    document.getElementById('schematicSvgWrapper').addEventListener('click', (e) => {
-        if (!e.target.closest('#paramEditOverlay') && !e.target.closest('.param-label')) {
-            closeParamEditor();
-        }
+    document.addEventListener('click', (e) => {
+        if (!e.target.closest('#paramEditOverlay') && !e.target.closest('.param-label')) closeParamEditor();
     });
 }
 
 function applyParamEdit() {
     if (!_editingParam) return;
-    const newValue = parseFloat(document.getElementById('paramEditInput').value);
-    if (isNaN(newValue)) { closeParamEditor(); return; }
+    const raw = document.getElementById('paramEditInput').value.trim();
+    if (!raw) { closeParamEditor(); return; }
 
-    // Push value into the corresponding form field
     const formField = document.getElementById(`param_${_editingParam}`);
     if (formField) {
-        formField.value = newValue;
+        formField.value = raw;
         formField.dispatchEvent(new Event('change', { bubbles: true }));
     }
 
     closeParamEditor();
-    // Trigger immediate schematic + deck refresh
     clearTimeout(schematicDebounceTimer);
     clearTimeout(deckUpdateDebounceTimer);
     refreshSchematic();
-    if (document.getElementById('autoUpdateDeck').checked) {
-        generateDeckPreview();
-    }
+    if (document.getElementById('autoUpdateDeck').checked) generateDeckPreview();
 }
 
 function closeParamEditor() {
@@ -335,55 +384,85 @@ function closeParamEditor() {
 }
 
 // ─────────────────────────────────────────────────────────
-// Form submission & deck preview
+// Form submission
 // ─────────────────────────────────────────────────────────
 
-function setupFormHandlers() {
-    document.getElementById('deviceForm').addEventListener('submit', async (e) => {
-        e.preventDefault();
-
-        const name = document.getElementById('simName').value;
-        const deviceType = document.getElementById('deviceType').value;
+function setupFormSubmit() {
+    document.getElementById('submitBtn').addEventListener('click', async () => {
+        const name       = document.getElementById('simName').value.trim();
+        const deviceType = document.getElementById('workspaceDeviceLabel').dataset.deviceType;
 
         if (!name || !deviceType) {
-            showAlert('Please fill in all required fields', 'warning');
-            return;
+            showAlert('Please fill in the simulation name', 'warning'); return;
         }
 
         const parameters = collectParameters();
 
         try {
             const result = await apiCall('/api/simulation/create', 'POST', {
-                name,
-                device_type: deviceType,
-                parameters,
-                auto_run: true
+                name, device_type: deviceType, parameters, auto_run: true
             });
-
             if (result.success) {
-                const message = result.auto_started
-                    ? `Simulation "${name}" created and started!`
-                    : `Simulation "${name}" created successfully!`;
-                showAlert(message, 'success');
+                showAlert(`Simulation "${name}" created and started!`, 'success');
                 setTimeout(() => {
                     window.location.href = `${getBasePath()}/simulation/${result.simulation.id}`;
-                }, 1000);
+                }, 900);
             }
-        } catch (error) {
-            console.error('Error creating simulation:', error);
-            showAlert(`Error: ${error.message}`, 'danger');
+        } catch (err) {
+            showAlert(`Error: ${err.message}`, 'danger');
         }
     });
+}
 
-    document.getElementById('refreshDeckBtn').addEventListener('click', generateDeckPreview);
+// selectPreset also needs to store deviceType for refreshSchematic
+const _origSelectPreset = selectPreset;
+// Patch the label element to carry the deviceType
+async function selectPreset(deviceType, label) {
+    try {
+        const result = await apiCall(`/api/devices/presets/${deviceType}`);
+        if (!result.success) { showAlert('Failed to load preset', 'danger'); return; }
 
-    document.getElementById('deviceType').addEventListener('change', (e) => {
-        const deviceType = e.target.value;
-        if (deviceType) {
-            const option = e.target.options[e.target.selectedIndex];
-            selectPreset(deviceType, option.text);
-        }
-    });
+        selectedPreset   = result.preset;
+        paramDescriptions = result.preset.param_descriptions || {};
+
+        document.getElementById('deviceGrid').style.display = 'none';
+        document.getElementById('deviceWorkspace').style.display = '';
+        const wLabel = document.getElementById('workspaceDeviceLabel');
+        wLabel.textContent = label;
+        wLabel.dataset.deviceType = deviceType;    // store for refreshSchematic
+
+        document.getElementById('submitBtn').disabled = false;
+        document.getElementById('refreshDeckBtn').disabled = false;
+        document.getElementById('svgHint').style.display = '';
+
+        renderTabParameters(deviceType, result.preset);
+        autoGenerateName();
+        refreshSchematic();
+        if (document.getElementById('autoUpdateDeck').checked) generateDeckPreview();
+
+    } catch (err) {
+        showAlert(`Error: ${err.message}`, 'danger');
+    }
+}
+
+// ─────────────────────────────────────────────────────────
+// Deck preview
+// ─────────────────────────────────────────────────────────
+
+async function generateDeckPreview() {
+    const deviceType = document.getElementById('workspaceDeviceLabel').dataset.deviceType;
+    if (!deviceType) { showDeckStatus('Select a device to see the input deck preview'); return; }
+
+    const parameters = collectParameters();
+    showDeckLoading();
+
+    try {
+        const result = await apiCall('/api/simulation/preview-deck', 'POST', { device_type: deviceType, parameters });
+        if (result.success) { currentDeckContent = result.deck; showDeckContent(result.deck); }
+        else showDeckError(result.error || 'Failed to generate deck preview');
+    } catch (err) {
+        showDeckError(err.message || 'Failed to generate deck preview');
+    }
 }
 
 function setupDeckPreviewHandlers() {
@@ -395,33 +474,6 @@ function setupDeckPreviewHandlers() {
         if (currentDeckContent) copyToClipboard(currentDeckContent);
     });
     document.getElementById('downloadFullscreenDeckBtn').addEventListener('click', downloadDeck);
-}
-
-async function generateDeckPreview() {
-    const deviceType = document.getElementById('deviceType').value;
-    if (!deviceType) {
-        showDeckStatus('Select a device to see the input deck preview');
-        return;
-    }
-
-    const parameters = collectParameters();
-    showDeckLoading();
-
-    try {
-        const result = await apiCall('/api/simulation/preview-deck', 'POST', {
-            device_type: deviceType,
-            parameters
-        });
-
-        if (result.success) {
-            currentDeckContent = result.deck;
-            showDeckContent(result.deck);
-        } else {
-            showDeckError(result.error || 'Failed to generate deck preview');
-        }
-    } catch (error) {
-        showDeckError(error.message || 'Failed to generate deck preview');
-    }
 }
 
 function showDeckStatus(message) {
@@ -461,8 +513,7 @@ function showDeckContent(content) {
     document.getElementById('deckPreviewContent').textContent = content;
     document.getElementById('copyDeckBtn').disabled = false;
     document.getElementById('downloadPreviewDeckBtn').disabled = false;
-    const lineCount = content.split('\n').length;
-    document.getElementById('deckLineCount').textContent = `${lineCount} lines`;
+    document.getElementById('deckLineCount').textContent = `${content.split('\n').length} lines`;
     document.getElementById('deckLastUpdated').textContent = `Updated: ${new Date().toLocaleTimeString()}`;
 }
 
