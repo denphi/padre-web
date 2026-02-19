@@ -102,6 +102,7 @@ class SimulationRunner:
             result = sim.run(
                 output_dir=None,  # Use the output_dir we already set
                 auto_output_dir=False,  # Don't create subdirectory
+                force_rerun=True,  # Always run fresh, never use cached results
                 verbose=False,
                 capture_output=True
             )
@@ -401,12 +402,17 @@ class SimulationRunner:
             v_step = p.get('reverse_v_step') if p.get('reverse_v_step') is not None else -0.1
             reverse_sweep = (v_start, v_end, v_step)
 
+        # barrier_height is the Schottky barrier height in eV (e.g. 0.7 eV).
+        # PADRE workfunction = electron affinity of Si (4.05 eV) + barrier_height.
+        barrier_height = p.get('barrier_height', 0.7)
+        workfunction = 4.05 + barrier_height
+
         sim = create_schottky_diode(
             length=p.get('length', 2.0),
             nx=p.get('nx', 50),
             ny=p.get('ny', 20),
             doping=p.get('n_doping', 1e16),
-            workfunction=p.get('barrier_height', 4.8),
+            workfunction=workfunction,
             temperature=p.get('temperature', 300),
             srh=p.get('srh', True),
             conmob=p.get('conmob', True),

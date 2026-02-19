@@ -254,7 +254,7 @@ def rerun_simulation(sim_id):
         if sim.status == SimulationStatus.RUNNING:
             return jsonify({'success': False, 'error': 'Simulation is already running'}), 400
 
-        # Reset state back to pending
+        # Reset state fully so the simulation runs fresh
         store.update(
             sim_id,
             status=SimulationStatus.PENDING,
@@ -263,6 +263,7 @@ def rerun_simulation(sim_id):
             completed_at=None,
             error_message=None,
             deck_content=None,
+            output_files=[],
         )
 
         # Create output directory (clear old outputs)
