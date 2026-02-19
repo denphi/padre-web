@@ -400,8 +400,8 @@ class DevicePreset:
             'description': 'Metal-Semiconductor Junction Diode',
             'parameters': {
                 'temperature': 300,
-                'n_doping': 1e16,
-                'barrier_height': 0.7,
+                'n_doping': 1e17,
+                'barrier_height': 0.28,
                 'length': 1.0,
                 'nx': 50,
                 'ny': 20,

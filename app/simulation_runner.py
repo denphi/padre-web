@@ -408,11 +408,13 @@ class SimulationRunner:
         workfunction = 4.05 + barrier_height
 
         sim = create_schottky_diode(
-            length=p.get('length', 2.0),
+            length=p.get('length', 1.0),
             nx=p.get('nx', 50),
             ny=p.get('ny', 20),
-            doping=p.get('n_doping', 1e16),
+            doping=p.get('n_doping', 1e17),
             workfunction=workfunction,
+            surf_rec=p.get('surf_rec', False),
+            barrier_lowering=p.get('barrier_lowering', False),
             temperature=p.get('temperature', 300),
             srh=p.get('srh', True),
             conmob=p.get('conmob', True),
