@@ -13,6 +13,12 @@ try:
 except ImportError:
     _IV_PARSER_AVAILABLE = False
 
+try:
+    from nanohubpadre.plot3d import parse_plot3d_file
+    _PLOT3D_AVAILABLE = True
+except ImportError:
+    _PLOT3D_AVAILABLE = False
+
 # Create blueprints
 main_bp = Blueprint('main', __name__)
 api_bp = Blueprint('api', __name__, url_prefix='/api')
@@ -671,6 +677,9 @@ def _parse_padre_output_file(filepath, filename):
             data['type'] = 'mesh'
             data['variable'] = 'mesh'
             data = _parse_mesh_file(lines, data)
+        elif _is_plot3d_file(name_base, content):
+            # 2D contour (Plot3D scatter format): pot_eq, el_bias, hh_eq, ef_eq, dop_eq, etc.
+            data = _parse_contour_file(filepath, name_base, data)
         elif name_base in ['eq', 'fwd', 'rev'] or name_base.endswith('_eq') or name_base.endswith('_fwd'):
             data['type'] = 'solution'
             data['variable'] = 'solution'
@@ -808,6 +817,76 @@ def _parse_1d_plot_file(lines, data):
 
 # Alias for backward compatibility
 _parse_1d_data_file = _parse_1d_plot_file
+
+
+# Plot3D quantity naming convention: quantity_bias, e.g. pot_eq, el_bias, hh_eq
+_PLOT3D_QUANTITY_PREFIXES = ('pot', 'el', 'hh', 'ef', 'qfn', 'qfp', 'dop', 'nc', 'pc')
+_PLOT3D_BIAS_SUFFIXES = ('_eq', '_bias', '_fwd', '_rev')
+
+def _is_plot3d_file(name_base, content):
+    """Detect if a file is a PADRE Plot3D scatter file."""
+    # Name-based detection: quantity_bias pattern
+    for prefix in _PLOT3D_QUANTITY_PREFIXES:
+        for suffix in _PLOT3D_BIAS_SUFFIXES:
+            if name_base == prefix + suffix:
+                return True
+    # Content-based detection: Plot3D scatter files start with 'begin scatter'
+    if content.lstrip().startswith('begin scatter'):
+        return True
+    return False
+
+
+def _parse_contour_file(filepath, name_base, data):
+    """Parse a PADRE Plot3D scatter file into a 2D contour dataset."""
+    # Determine quantity variable from filename
+    quantity_map = {
+        'pot': ('potential', 'Potential (V)'),
+        'el':  ('electrons', 'Electrons (/cm³)'),
+        'hh':  ('holes',     'Holes (/cm³)'),
+        'ef':  ('e_field',   'Electric Field (V/cm)'),
+        'qfn': ('qfn',       'Electron Quasi-Fermi (eV)'),
+        'qfp': ('qfp',       'Hole Quasi-Fermi (eV)'),
+        'dop': ('doping',    'Doping (/cm³)'),
+    }
+    variable = 'contour'
+    colorbar_label = 'Value'
+    for prefix, (var, label) in quantity_map.items():
+        if name_base.startswith(prefix):
+            variable = var
+            colorbar_label = label
+            break
+
+    data['type'] = 'contour'
+    data['variable'] = variable
+    data['colorbar_label'] = colorbar_label
+
+    if not _PLOT3D_AVAILABLE:
+        data['error'] = 'plot3d parser not available'
+        return data
+
+    try:
+        plot3d = parse_plot3d_file(filepath)
+        if plot3d.num_nodes == 0:
+            data['error'] = 'No data parsed from Plot3D file'
+            return data
+
+        # Convert cm → µm for display
+        x_um = (plot3d.x * 1e4).tolist()
+        y_um = (plot3d.y * 1e4).tolist()
+        vals = plot3d.values.tolist()
+
+        data['x'] = x_um
+        data['y'] = y_um
+        data['z'] = vals
+        data['label'] = plot3d.label or colorbar_label
+        data['num_nodes'] = plot3d.num_nodes
+        data['columns'] = ['X (µm)', 'Y (µm)', colorbar_label]
+        # values kept empty — front-end uses x/y/z directly for contour
+        data['values'] = []
+    except Exception as e:
+        data['error'] = str(e)
+
+    return data
 
 
 def _parse_mesh_file(lines, data):

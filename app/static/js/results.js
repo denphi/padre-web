@@ -151,6 +151,11 @@ function categorizeFile(filename) {
     if (nameBase.includes('mesh') || nameBase.includes('grid')) {
         return 'mesh';
     }
+    // 2D contour files (Plot3D scatter): pot_eq, el_bias, hh_eq, ef_eq, dop_eq, qfn_eq, qfp_eq
+    // Pattern: known_quantity + underscore + bias_suffix
+    if (/^(pot|el|hh|ef|qfn|qfp|dop|nc|pc)_(eq|bias|fwd|rev)$/.test(nameBase)) {
+        return 'contour';
+    }
     // Carrier concentration files (ele, hole, electron, hole concentrations)
     if (nameBase === 'ele' || nameBase === 'hole' ||
         nameBase.startsWith('ele') || nameBase.startsWith('hole') ||
@@ -197,7 +202,7 @@ function renderOutputFiles(files) {
     const basePath = getBasePath();
 
     // Categories that support plotting (plottable groups)
-    const plottableCategories = ['iv', 'cv', 'band', 'qf', 'mesh', 'carrier', 'field'];
+    const plottableCategories = ['iv', 'cv', 'band', 'qf', 'mesh', 'carrier', 'field', 'contour'];
 
     // Categorize files using the helper function
     const categories = {
@@ -208,6 +213,7 @@ function renderOutputFiles(files) {
         mesh: { label: 'Mesh', files: [], icon: 'fas fa-th' },
         carrier: { label: 'Carrier Density', files: [], icon: 'fas fa-atom' },
         field: { label: 'Electric Field/Potential', files: [], icon: 'fas fa-bolt' },
+        contour: { label: '2D Contour Maps', files: [], icon: 'fas fa-map' },
         deck: { label: 'Input Files', files: [], icon: 'fas fa-file-code' },
         other: { label: 'Other Files', files: [], icon: 'fas fa-file' }
     };
@@ -346,6 +352,7 @@ function getFileIcon(fileType) {
         case 'mesh': return 'fas fa-th';
         case 'carrier': return 'fas fa-atom';
         case 'field': return 'fas fa-bolt';
+        case 'contour': return 'fas fa-map';
         case 'deck': return 'fas fa-file-code';
         default: return 'fas fa-file';
     }
@@ -376,6 +383,9 @@ async function onCategoryPlotAll(category, files) {
             await plotAllCarriers(files);
         } else if (category === 'field') {
             await plotAllFields(files);
+        } else if (category === 'contour') {
+            // Show the first contour file (can't overlay 2D maps)
+            await onFileClick(files[0].name, 'contour');
         } else {
             // Generic overlay for other categories
             await plotAllGeneric(files, category);
@@ -797,6 +807,12 @@ function plotSelectedFile(data, filename, fileType) {
     mainContainer.innerHTML = '<div id="mainPlotArea" style="height: 450px;"></div>';
     const containerId = 'mainPlotArea';
 
+    // Contour files use x/y/z arrays instead of values
+    if (data.type === 'contour') {
+        plotContourData(containerId, data, filename);
+        return;
+    }
+
     if (!data.values || data.values.length === 0) {
         mainContainer.innerHTML =
             '<p class="text-muted text-center py-5">No plottable data in this file</p>';
@@ -982,36 +998,39 @@ function plotFieldData(containerId, values, filename, variable = '', columns = [
 
 function plotIVData(containerId, values, filename, columns = []) {
     const voltages = values.map(row => row[0]);
-    const currents = values.map(row => row[1]);
 
-    // Use backend column labels if available
     const xLabel = columns[0] || 'Voltage (V)';
-    const yLabel = columns[1] || 'Current (A)';
-
-    // Generate descriptive legend name from filename
     const legendName = getDescriptiveName(filename, 'iv');
+    const traceColors = ['#007bff', '#dc3545', '#28a745', '#fd7e14'];
 
-    const trace = {
-        x: voltages,
-        y: currents,
-        type: 'scatter',
-        mode: 'lines+markers',
-        name: legendName,
-        line: { color: '#007bff', width: 2 },
-        marker: { size: 4 }
-    };
+    // Build one trace per electrode current column
+    const numCurrentCols = values[0] ? values[0].length - 1 : 1;
+    const traces = [];
+    for (let i = 0; i < numCurrentCols; i++) {
+        const currents = values.map(row => row[i + 1]);
+        const yLabel = columns[i + 1] || (numCurrentCols === 1 ? 'Current (A)' : `I_elec${i + 1} (A)`);
+        traces.push({
+            x: voltages,
+            y: currents,
+            type: 'scatter',
+            mode: 'lines+markers',
+            name: numCurrentCols === 1 ? legendName : `${legendName} — ${yLabel}`,
+            line: { color: traceColors[i % traceColors.length], width: 2 },
+            marker: { size: 4 }
+        });
+    }
 
     const layout = {
         title: `I-V Characteristic: ${legendName}`,
         xaxis: { title: xLabel, gridcolor: '#e0e0e0' },
-        yaxis: { title: yLabel, gridcolor: '#e0e0e0', exponentformat: 'e' },
+        yaxis: { title: columns[1] || 'Current (A)', gridcolor: '#e0e0e0', exponentformat: 'e' },
         plot_bgcolor: '#fafafa',
         paper_bgcolor: '#ffffff',
         margin: { t: 50, r: 30, b: 50, l: 70 },
         showlegend: true
     };
 
-    Plotly.newPlot(containerId, [trace], layout, { responsive: true });
+    Plotly.newPlot(containerId, traces, layout, { responsive: true });
 }
 
 function plotBandData(containerId, values, filename, variable = '', columns = []) {
@@ -1095,6 +1114,60 @@ function getBandInfo(variable, filename) {
     }
 
     return { bandType, biasCondition, color };
+}
+
+function plotContourData(containerId, data, filename) {
+    if (!data.x || data.x.length === 0) {
+        document.getElementById('plotsVisualization').innerHTML =
+            '<p class="text-muted text-center py-5">No 2D data available in this file</p>';
+        return;
+    }
+
+    const biasCondition = extractBiasCondition(filename);
+    const biasLabel = getBiasLabel(biasCondition);
+    const label = data.label || data.colorbar_label || data.variable || filename;
+
+    // Choose colorscale by quantity type
+    const colorscaleMap = {
+        potential: 'RdBu',
+        electrons: 'YlOrRd',
+        holes: 'YlOrBr',
+        e_field: 'Hot',
+        qfn: 'Greens',
+        qfp: 'Oranges',
+        doping: 'Viridis',
+    };
+    const colorscale = colorscaleMap[data.variable] || 'Viridis';
+
+    // Use log scale for carrier concentrations and doping (span many decades)
+    const logVars = ['electrons', 'holes', 'doping'];
+    let zData = data.z;
+    let colorbarTitle = label;
+    if (logVars.includes(data.variable)) {
+        zData = data.z.map(v => v > 0 ? Math.log10(v) : 0);
+        colorbarTitle = `log₁₀(${label})`;
+    }
+
+    const trace = {
+        x: data.x,
+        y: data.y,
+        z: zData,
+        type: 'heatmap',
+        colorscale: colorscale,
+        colorbar: { title: colorbarTitle, titleside: 'right' },
+        hovertemplate: 'x: %{x:.3f} µm<br>y: %{y:.3f} µm<br>value: %{z:.4g}<extra></extra>'
+    };
+
+    const layout = {
+        title: `${label} — ${biasLabel} (${filename})`,
+        xaxis: { title: 'X (µm)', gridcolor: '#e0e0e0', scaleanchor: 'y', scaleratio: 1 },
+        yaxis: { title: 'Y (µm)', gridcolor: '#e0e0e0', autorange: 'reversed' },
+        plot_bgcolor: '#fafafa',
+        paper_bgcolor: '#ffffff',
+        margin: { t: 60, r: 80, b: 60, l: 70 }
+    };
+
+    Plotly.newPlot(containerId, [trace], layout, { responsive: true });
 }
 
 function plotMeshData(containerId, values, filename) {
