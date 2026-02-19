@@ -4,6 +4,17 @@ from flask_cors import CORS
 import logging
 from logging.handlers import RotatingFileHandler
 import os
+import sys
+
+# Ensure the repo root (containing nanohubpadre package) is on the path
+# so the library is importable regardless of working directory.
+# __file__ is  <repo>/padre_web/app/__init__.py
+#   dirname once  → <repo>/padre_web/app/
+#   dirname twice → <repo>/padre_web/
+#   dirname three → <repo>/              ← this is where nanohubpadre/ lives
+_repo_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+if os.path.isdir(os.path.join(_repo_root, 'nanohubpadre')) and _repo_root not in sys.path:
+    sys.path.insert(0, _repo_root)
 
 
 def create_app(config=None, base_path=None):
@@ -49,13 +60,14 @@ def create_app(config=None, base_path=None):
     # Note: When behind a proxy, the proxy strips the base path, so the app
     # always sees requests at "/". The base_path is only used for generating
     # correct URLs in templates and JavaScript for links/redirects.
-    from app.routes import main_bp, api_bp, devices_bp, simulation_bp, results_bp
+    from app.routes import main_bp, api_bp, devices_bp, simulation_bp, results_bp, builder_bp
 
     app.register_blueprint(main_bp)
     app.register_blueprint(api_bp)
     app.register_blueprint(devices_bp)
     app.register_blueprint(simulation_bp)
     app.register_blueprint(results_bp)
+    app.register_blueprint(builder_bp)
 
     # Make base_path available in templates
     @app.context_processor

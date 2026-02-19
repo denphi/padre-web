@@ -16,6 +16,13 @@ Options:
 import argparse
 import os
 import sys
+
+# Add parent directory to path so nanohubpadre can be found when running
+# from padre_web/ without installing the package.
+_parent = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _parent not in sys.path:
+    sys.path.insert(0, _parent)
+
 from app import create_app
 
 if __name__ == '__main__':

@@ -1,22 +1,30 @@
-/* Device Configuration Page Logic */
+/* Device Configuration Page Logic — with interactive SVG schematic */
 
 let selectedPreset = null;
 let deckFullscreenModal;
 let currentDeckContent = '';
 let deckUpdateDebounceTimer = null;
-const DECK_UPDATE_DEBOUNCE_MS = 500;
+let schematicDebounceTimer = null;
+const DEBOUNCE_MS = 500;
+
+// Currently active inline editor state
+let _editingParam = null;
 
 document.addEventListener('DOMContentLoaded', () => {
     deckFullscreenModal = new bootstrap.Modal(document.getElementById('deckFullscreenModal'));
     loadPresets();
     setupFormHandlers();
     setupDeckPreviewHandlers();
+    setupParamEditor();
 });
+
+// ─────────────────────────────────────────────────────────
+// Presets
+// ─────────────────────────────────────────────────────────
 
 async function loadPresets() {
     try {
         const result = await apiCall('/api/devices/presets');
-
         if (result.success) {
             renderPresets(result.presets);
         }
@@ -28,19 +36,17 @@ async function loadPresets() {
 
 function renderPresets(presets) {
     const container = document.getElementById('devicePresets');
-
     container.innerHTML = presets.map(preset => `
-        <button type="button" class="list-group-item list-group-item-action text-start"
+        <button type="button" class="list-group-item list-group-item-action text-start py-2 px-3"
                 data-preset-id="${preset.id}"
                 onclick="selectPreset('${preset.id}', '${preset.label}')">
-            <div class="fw-bold">${preset.label}</div>
-            <small class="text-muted">${preset.description}</small>
+            <div class="fw-bold small">${preset.label}</div>
+            <div class="text-muted" style="font-size:0.72rem">${preset.description}</div>
         </button>
     `).join('');
 
-    // Populate device type select
     const select = document.getElementById('deviceType');
-    select.innerHTML = '<option value="">Select a device type...</option>' +
+    select.innerHTML = '<option value="">Select a device type…</option>' +
         presets.map(p => `<option value="${p.id}">${p.label}</option>`).join('');
 }
 
@@ -48,23 +54,20 @@ async function selectPreset(deviceType, label) {
     try {
         document.getElementById('deviceType').value = deviceType;
 
-        // Update active state in preset list
         document.querySelectorAll('#devicePresets .list-group-item').forEach(item => {
-            item.classList.remove('active');
-            if (item.dataset.presetId === deviceType) {
-                item.classList.add('active');
-            }
+            item.classList.toggle('active', item.dataset.presetId === deviceType);
         });
 
         const result = await apiCall(`/api/devices/presets/${deviceType}`);
-
         if (result.success) {
             selectedPreset = result.preset;
             renderParameterForm(deviceType, result.preset);
             document.getElementById('submitBtn').disabled = false;
             document.getElementById('refreshDeckBtn').disabled = false;
+            document.getElementById('svgHint').style.display = '';
 
-            // Auto-generate deck preview
+            // Fetch schematic + deck preview together
+            refreshSchematic();
             if (document.getElementById('autoUpdateDeck').checked) {
                 generateDeckPreview();
             }
@@ -75,6 +78,10 @@ async function selectPreset(deviceType, label) {
     }
 }
 
+// ─────────────────────────────────────────────────────────
+// Parameter form
+// ─────────────────────────────────────────────────────────
+
 function renderParameterForm(deviceType, preset) {
     const container = document.getElementById('parametersContainer');
     const parameters = preset.parameters || {};
@@ -82,34 +89,29 @@ function renderParameterForm(deviceType, preset) {
     const sweep = preset.sweep || {};
 
     let html = '';
-
-    // Render device parameters
     const categories = categorizeParameters(parameters);
 
     for (const [category, params] of Object.entries(categories)) {
-        html += `<div class="parameter-group">
-                    <h6>${category}</h6>`;
-
+        html += `<div class="parameter-group mb-2">
+                    <h6 class="small text-uppercase text-muted mb-1">${category}</h6>`;
         for (const [key, value] of Object.entries(params)) {
             html += renderInputField(`param_${key}`, key, value);
         }
         html += '</div>';
     }
 
-    // Render output options
     if (Object.keys(outputs).length > 0) {
-        html += `<div class="parameter-group">
-                    <h6>Output Logging</h6>`;
+        html += `<div class="parameter-group mb-2">
+                    <h6 class="small text-uppercase text-muted mb-1">Output Logging</h6>`;
         for (const [key, value] of Object.entries(outputs)) {
             html += renderInputField(`output_${key}`, key, value);
         }
         html += '</div>';
     }
 
-    // Render sweep options
     if (Object.keys(sweep).length > 0) {
-        html += `<div class="parameter-group">
-                    <h6>Voltage Sweep</h6>`;
+        html += `<div class="parameter-group mb-2">
+                    <h6 class="small text-uppercase text-muted mb-1">Voltage Sweep</h6>`;
         for (const [key, value] of Object.entries(sweep)) {
             html += renderInputField(`sweep_${key}`, key, value);
         }
@@ -118,7 +120,6 @@ function renderParameterForm(deviceType, preset) {
 
     container.innerHTML = html;
 
-    // Add change listeners for auto-update
     document.querySelectorAll('.param-input').forEach(input => {
         input.addEventListener('change', onParameterChange);
         input.addEventListener('input', onParameterChange);
@@ -132,34 +133,30 @@ function renderInputField(inputId, key, value) {
 
     if (inputType === 'checkbox') {
         return `
-            <div class="form-check mb-2">
+            <div class="form-check mb-1">
                 <input class="form-check-input param-input" type="checkbox" id="${inputId}"
                        ${value ? 'checked' : ''}>
-                <label class="form-check-label" for="${inputId}">${label}</label>
-            </div>
-        `;
-    } else {
-        return `
-            <div class="mb-2">
-                <label for="${inputId}" class="form-label small">${label}</label>
-                <input class="form-control form-control-sm param-input" type="${inputType}"
-                       id="${inputId}" value="${value || ''}"
-                       ${inputType === 'number' ? 'step="any"' : ''}>
+                <label class="form-check-label small" for="${inputId}">${label}</label>
             </div>
         `;
     }
+    return `
+        <div class="mb-1">
+            <label for="${inputId}" class="form-label small mb-0">${label}</label>
+            <input class="form-control form-control-sm param-input" type="${inputType}"
+                   id="${inputId}" value="${value ?? ''}"
+                   ${inputType === 'number' ? 'step="any"' : ''}>
+        </div>
+    `;
 }
 
 function onParameterChange() {
     if (document.getElementById('autoUpdateDeck').checked) {
-        // Debounce the deck update
-        if (deckUpdateDebounceTimer) {
-            clearTimeout(deckUpdateDebounceTimer);
-        }
-        deckUpdateDebounceTimer = setTimeout(() => {
-            generateDeckPreview();
-        }, DECK_UPDATE_DEBOUNCE_MS);
+        clearTimeout(deckUpdateDebounceTimer);
+        deckUpdateDebounceTimer = setTimeout(generateDeckPreview, DEBOUNCE_MS);
     }
+    clearTimeout(schematicDebounceTimer);
+    schematicDebounceTimer = setTimeout(refreshSchematic, DEBOUNCE_MS);
 }
 
 function categorizeParameters(params) {
@@ -170,11 +167,16 @@ function categorizeParameters(params) {
     };
 
     const tempPhysics = ['temperature', 'srh', 'auger', 'conmob', 'fldmob', 'bgn', 'newton'];
-    const dopingStructure = ['doping_p', 'doping_n', 'junction_depth', 'channel_length',
-                            'channel_width', 'oxide_thickness', 'substrate_doping',
-                            'source_drain_doping', 'base_width', 'gate_doping',
-                            'emitter_doping', 'collector_doping', 'barrier_height',
-                            'semiconductor_doping'];
+    const dopingStructure = [
+        'doping_p', 'doping_n', 'junction_depth', 'channel_length', 'channel_width',
+        'oxide_thickness', 'substrate_doping', 'source_drain_doping', 'base_width',
+        'gate_doping', 'emitter_doping', 'collector_doping', 'barrier_height',
+        'semiconductor_doping', 'p_doping', 'n_doping', 'junction_position',
+        'length', 'width', 'device_width', 'device_depth', 'gate_oxide_thickness',
+        'channel_doping', 'emitter_width', 'collector_width', 'base_doping',
+        'emitter_depth', 'base_thickness', 'channel_depth', 'substrate_depth',
+        'gate_length', 'contact_doping', 'gate_workfunction',
+    ];
 
     for (const [key, value] of Object.entries(params)) {
         if (tempPhysics.includes(key)) {
@@ -186,43 +188,155 @@ function categorizeParameters(params) {
         }
     }
 
-    // Remove empty categories
     return Object.fromEntries(Object.entries(categories).filter(([_, v]) => Object.keys(v).length > 0));
 }
 
 function collectParameters() {
     const parameters = {};
-
-    // Collect device parameters
     document.querySelectorAll('[id^="param_"]').forEach(input => {
-        const key = input.id.replace('param_', '');
-        parameters[key] = getInputValue(input);
+        parameters[input.id.replace('param_', '')] = getInputValue(input);
     });
-
-    // Collect output options
     document.querySelectorAll('[id^="output_"]').forEach(input => {
-        const key = input.id.replace('output_', '');
-        parameters[key] = getInputValue(input);
+        parameters[input.id.replace('output_', '')] = getInputValue(input);
     });
-
-    // Collect sweep options
     document.querySelectorAll('[id^="sweep_"]').forEach(input => {
-        const key = input.id.replace('sweep_', '');
-        parameters[key] = getInputValue(input);
+        parameters[input.id.replace('sweep_', '')] = getInputValue(input);
     });
-
     return parameters;
 }
 
 function getInputValue(input) {
-    if (input.type === 'checkbox') {
-        return input.checked;
-    } else if (input.type === 'number') {
-        return input.value ? parseFloat(input.value) : null;
-    } else {
-        return input.value || null;
+    if (input.type === 'checkbox') return input.checked;
+    if (input.type === 'number') return input.value ? parseFloat(input.value) : null;
+    return input.value || null;
+}
+
+// ─────────────────────────────────────────────────────────
+// Interactive SVG Schematic
+// ─────────────────────────────────────────────────────────
+
+async function refreshSchematic() {
+    const deviceType = document.getElementById('deviceType').value;
+    if (!deviceType) return;
+
+    const params = collectParameters();
+    // Build query string — only pass numeric/string geometry params
+    const qs = new URLSearchParams();
+    qs.set('interactive', 'true');
+    for (const [k, v] of Object.entries(params)) {
+        if (v !== null && v !== undefined && typeof v !== 'boolean') {
+            qs.set(k, v);
+        }
+    }
+
+    document.getElementById('schematicPlaceholder').style.display = 'none';
+    document.getElementById('schematicSvgWrapper').style.display = 'none';
+    document.getElementById('schematicLoading').style.display = 'block';
+
+    try {
+        const result = await apiCall(`/api/devices/schematic/${deviceType}?${qs.toString()}`);
+        if (result.success) {
+            const wrapper = document.getElementById('schematicSvg');
+            wrapper.innerHTML = result.svg;
+            // Make SVG responsive
+            const svgEl = wrapper.querySelector('svg');
+            if (svgEl) {
+                svgEl.style.maxWidth = '100%';
+                svgEl.style.height = 'auto';
+            }
+            attachParamLabelHandlers();
+            document.getElementById('schematicSvgWrapper').style.display = 'block';
+        } else {
+            document.getElementById('schematicPlaceholder').style.display = 'block';
+        }
+    } catch (e) {
+        console.warn('Schematic fetch failed:', e);
+        document.getElementById('schematicPlaceholder').style.display = 'block';
+    } finally {
+        document.getElementById('schematicLoading').style.display = 'none';
     }
 }
+
+function attachParamLabelHandlers() {
+    const svgContainer = document.getElementById('schematicSvg');
+    svgContainer.querySelectorAll('.param-label').forEach(el => {
+        el.style.cursor = 'pointer';
+        el.addEventListener('click', (e) => {
+            e.stopPropagation();
+            openParamEditor(el, e);
+        });
+    });
+}
+
+function openParamEditor(labelEl, mouseEvent) {
+    const paramName = labelEl.dataset.param;
+    const currentValue = parseFloat(labelEl.dataset.value) || 0;
+
+    _editingParam = paramName;
+
+    const overlay = document.getElementById('paramEditOverlay');
+    const input = document.getElementById('paramEditInput');
+    const lbl = document.getElementById('paramEditLabel');
+
+    lbl.textContent = paramName.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+    input.value = currentValue;
+
+    // Position the overlay near the click
+    const wrapperRect = document.getElementById('schematicSvgWrapper').getBoundingClientRect();
+    const clickX = mouseEvent.clientX - wrapperRect.left + document.getElementById('schematicSvgWrapper').scrollLeft;
+    const clickY = mouseEvent.clientY - wrapperRect.top + document.getElementById('schematicSvgWrapper').scrollTop;
+    overlay.style.left = Math.min(clickX, wrapperRect.width - 180) + 'px';
+    overlay.style.top = (clickY + 10) + 'px';
+    overlay.style.display = 'block';
+
+    setTimeout(() => input.focus(), 50);
+}
+
+function setupParamEditor() {
+    document.getElementById('paramEditApply').addEventListener('click', applyParamEdit);
+    document.getElementById('paramEditCancel').addEventListener('click', closeParamEditor);
+    document.getElementById('paramEditInput').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') applyParamEdit();
+        if (e.key === 'Escape') closeParamEditor();
+    });
+    // Click outside to close
+    document.getElementById('schematicSvgWrapper').addEventListener('click', (e) => {
+        if (!e.target.closest('#paramEditOverlay') && !e.target.closest('.param-label')) {
+            closeParamEditor();
+        }
+    });
+}
+
+function applyParamEdit() {
+    if (!_editingParam) return;
+    const newValue = parseFloat(document.getElementById('paramEditInput').value);
+    if (isNaN(newValue)) { closeParamEditor(); return; }
+
+    // Push value into the corresponding form field
+    const formField = document.getElementById(`param_${_editingParam}`);
+    if (formField) {
+        formField.value = newValue;
+        formField.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+
+    closeParamEditor();
+    // Trigger immediate schematic + deck refresh
+    clearTimeout(schematicDebounceTimer);
+    clearTimeout(deckUpdateDebounceTimer);
+    refreshSchematic();
+    if (document.getElementById('autoUpdateDeck').checked) {
+        generateDeckPreview();
+    }
+}
+
+function closeParamEditor() {
+    document.getElementById('paramEditOverlay').style.display = 'none';
+    _editingParam = null;
+}
+
+// ─────────────────────────────────────────────────────────
+// Form submission & deck preview
+// ─────────────────────────────────────────────────────────
 
 function setupFormHandlers() {
     document.getElementById('deviceForm').addEventListener('submit', async (e) => {
@@ -243,7 +357,7 @@ function setupFormHandlers() {
                 name,
                 device_type: deviceType,
                 parameters,
-                auto_run: true  // Auto-run the simulation
+                auto_run: true
             });
 
             if (result.success) {
@@ -263,11 +377,9 @@ function setupFormHandlers() {
 
     document.getElementById('refreshDeckBtn').addEventListener('click', generateDeckPreview);
 
-    // Device type select change handler
     document.getElementById('deviceType').addEventListener('change', (e) => {
         const deviceType = e.target.value;
         if (deviceType) {
-            // Find the label from presets
             const option = e.target.options[e.target.selectedIndex];
             selectPreset(deviceType, option.text);
         }
@@ -275,44 +387,24 @@ function setupFormHandlers() {
 }
 
 function setupDeckPreviewHandlers() {
-    // Copy deck button
     document.getElementById('copyDeckBtn').addEventListener('click', () => {
-        if (currentDeckContent) {
-            copyToClipboard(currentDeckContent);
-        }
+        if (currentDeckContent) copyToClipboard(currentDeckContent);
     });
-
-    // Download preview deck button
-    document.getElementById('downloadPreviewDeckBtn').addEventListener('click', () => {
-        downloadDeck();
-    });
-
-    // Fullscreen modal buttons
+    document.getElementById('downloadPreviewDeckBtn').addEventListener('click', downloadDeck);
     document.getElementById('copyFullscreenDeckBtn').addEventListener('click', () => {
-        if (currentDeckContent) {
-            copyToClipboard(currentDeckContent);
-        }
+        if (currentDeckContent) copyToClipboard(currentDeckContent);
     });
-
-    document.getElementById('downloadFullscreenDeckBtn').addEventListener('click', () => {
-        downloadDeck();
-    });
+    document.getElementById('downloadFullscreenDeckBtn').addEventListener('click', downloadDeck);
 }
 
 async function generateDeckPreview() {
     const deviceType = document.getElementById('deviceType').value;
-
     if (!deviceType) {
         showDeckStatus('Select a device to see the input deck preview');
         return;
     }
 
     const parameters = collectParameters();
-
-    // Debug: log collected parameters
-    console.log('Collected parameters:', parameters);
-
-    // Show loading state
     showDeckLoading();
 
     try {
@@ -328,7 +420,6 @@ async function generateDeckPreview() {
             showDeckError(result.error || 'Failed to generate deck preview');
         }
     } catch (error) {
-        console.error('Error generating deck preview:', error);
         showDeckError(error.message || 'Failed to generate deck preview');
     }
 }
@@ -370,8 +461,6 @@ function showDeckContent(content) {
     document.getElementById('deckPreviewContent').textContent = content;
     document.getElementById('copyDeckBtn').disabled = false;
     document.getElementById('downloadPreviewDeckBtn').disabled = false;
-
-    // Update footer info
     const lineCount = content.split('\n').length;
     document.getElementById('deckLineCount').textContent = `${lineCount} lines`;
     document.getElementById('deckLastUpdated').textContent = `Updated: ${new Date().toLocaleTimeString()}`;
@@ -379,14 +468,12 @@ function showDeckContent(content) {
 
 function downloadDeck() {
     if (!currentDeckContent) return;
-
     const name = document.getElementById('simName').value || 'preview';
-    const element = document.createElement('a');
-    element.setAttribute('href', 'data:text/plain;charset=utf-8,' +
-        encodeURIComponent(currentDeckContent));
-    element.setAttribute('download', `${name}.deck`);
-    element.style.display = 'none';
-    document.body.appendChild(element);
-    element.click();
-    document.body.removeChild(element);
+    const el = document.createElement('a');
+    el.setAttribute('href', 'data:text/plain;charset=utf-8,' + encodeURIComponent(currentDeckContent));
+    el.setAttribute('download', `${name}.deck`);
+    el.style.display = 'none';
+    document.body.appendChild(el);
+    el.click();
+    document.body.removeChild(el);
 }

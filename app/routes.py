@@ -13,6 +13,7 @@ api_bp = Blueprint('api', __name__, url_prefix='/api')
 devices_bp = Blueprint('devices', __name__, url_prefix='/api/devices')
 simulation_bp = Blueprint('simulation', __name__, url_prefix='/api/simulation')
 results_bp = Blueprint('results', __name__, url_prefix='/api/results')
+builder_bp = Blueprint('builder', __name__, url_prefix='/api/builder')
 
 # Global store
 _simulation_store = None
@@ -54,6 +55,12 @@ def results_page(sim_id):
     return render_template('results.html', sim_id=sim_id)
 
 
+@main_bp.route('/builder')
+def builder_page():
+    """Serve the advanced simulation builder page."""
+    return render_template('builder.html')
+
+
 # ============= DEVICE API ROUTES =============
 
 @devices_bp.route('/presets')
@@ -91,6 +98,32 @@ def get_preset(device_type):
             'success': False,
             'error': str(e)
         }), 500
+
+
+@devices_bp.route('/schematic/<device_type>')
+def get_device_schematic(device_type):
+    """Get SVG schematic for a device with current parameter values."""
+    try:
+        from nanohubpadre.devices.schematics import device_schematic
+
+        # Collect numeric/string params from query string
+        params = {}
+        for k, v in request.args.items():
+            if k == 'interactive':
+                continue
+            try:
+                params[k] = float(v)
+            except (ValueError, TypeError):
+                params[k] = v
+
+        interactive = request.args.get('interactive', 'true').lower() in ('true', '1', 'yes')
+        schematic = device_schematic(device_type, interactive=interactive, **params)
+        return jsonify({'success': True, 'svg': str(schematic)}), 200
+
+    except ValueError as e:
+        return jsonify({'success': False, 'error': str(e)}), 404
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 # ============= SIMULATION API ROUTES =============
@@ -699,6 +732,332 @@ def _parse_mesh_file(lines, data):
         data['columns'] = ['X (um)', 'Y (um)']
 
     return data
+
+
+# ============= BUILDER API ROUTES =============
+
+@builder_bp.route('/generate-deck', methods=['POST'])
+def builder_generate_deck():
+    """Generate a PADRE deck from a builder canvas state."""
+    try:
+        from app.simulation_runner import PADRE_AVAILABLE
+        if not PADRE_AVAILABLE:
+            return jsonify({'success': False, 'error': 'nanohubpadre not available'}), 500
+
+        data = request.get_json()
+        if not data:
+            return jsonify({'success': False, 'error': 'No data provided'}), 400
+
+        deck = _build_deck_from_state(data)
+        return jsonify({'success': True, 'deck': deck}), 200
+
+    except Exception as e:
+        import traceback
+        return jsonify({'success': False, 'error': str(e), 'traceback': traceback.format_exc()}), 500
+
+
+@builder_bp.route('/run', methods=['POST'])
+def builder_run():
+    """Run a simulation built from the canvas state."""
+    try:
+        from app.simulation_runner import PADRE_AVAILABLE, SimulationRunner
+        if not PADRE_AVAILABLE:
+            return jsonify({'success': False, 'error': 'nanohubpadre not available'}), 500
+
+        data = request.get_json()
+        if not data:
+            return jsonify({'success': False, 'error': 'No data provided'}), 400
+
+        name = data.get('name', 'Custom Simulation')
+        state = data.get('state', data)
+
+        sim_id = str(uuid.uuid4())[:8]
+        store = get_simulation_store()
+
+        sim = Simulation(
+            sim_id=sim_id,
+            name=name,
+            device_type='custom',
+            parameters={'builder_state': state}
+        )
+        store.add(sim)
+
+        output_dir = os.path.join(current_app.config['OUTPUTS_FOLDER'], sim_id)
+        os.makedirs(output_dir, exist_ok=True)
+        store.update(sim_id, status=SimulationStatus.RUNNING, started_at=datetime.now(), progress=0.0)
+
+        runner = _BuilderSimulationRunner(
+            simulation_id=sim_id,
+            state=state,
+            output_dir=output_dir,
+            progress_callback=lambda prog, msg: _on_simulation_progress(sim_id, prog, msg)
+        )
+        _running_simulations[sim_id] = runner
+        runner.start()
+
+        return jsonify({'success': True, 'simulation_id': sim_id}), 201
+
+    except Exception as e:
+        import traceback
+        return jsonify({'success': False, 'error': str(e), 'traceback': traceback.format_exc()}), 500
+
+
+def _build_deck_from_state(state):
+    """Convert a builder canvas JSON state to a PADRE deck string."""
+    from nanohubpadre.simulation import Simulation as PadreSimulation
+    from nanohubpadre.mesh import Mesh
+    from nanohubpadre.region import Region
+    from nanohubpadre.doping import Doping
+    from nanohubpadre.electrode import Electrode
+    from nanohubpadre.contact import Contact
+    from nanohubpadre.models import Models
+    from nanohubpadre.solver import Solve
+    from nanohubpadre.log import Log
+
+    sim = PadreSimulation(title="Custom Simulation")
+
+    # ── Mesh ──────────────────────────────────────────────
+    mesh_data = state.get('mesh', {})
+    nx = int(mesh_data.get('nx', 50))
+    ny = int(mesh_data.get('ny', 50))
+    xmin = float(mesh_data.get('xmin', 0.0))
+    xmax = float(mesh_data.get('xmax', 1.0))
+    ymin = float(mesh_data.get('ymin', 0.0))
+    ymax = float(mesh_data.get('ymax', 1.0))
+
+    mesh = Mesh(nx=nx, ny=ny, outfile='mesh.pg')
+    mesh.add_x_mesh(1, xmin)
+    mesh.add_x_mesh(nx, xmax)
+    mesh.add_y_mesh(1, ymin)
+    mesh.add_y_mesh(ny, ymax)
+    sim.mesh = mesh
+
+    # ── Models ────────────────────────────────────────────
+    models_data = state.get('models', {})
+    temperature = float(models_data.get('temperature', 300)) if models_data else 300.0
+    srh = bool(models_data.get('srh', True)) if models_data else True
+    auger = bool(models_data.get('auger', False)) if models_data else False
+    conmob = bool(models_data.get('conmob', True)) if models_data else True
+    fldmob = bool(models_data.get('fldmob', True)) if models_data else True
+    sim.models = Models.drift_diffusion(temperature=temperature, srh=srh,
+                                        auger=auger, conmob=conmob, fldmob=fldmob)
+
+    # ── Regions ───────────────────────────────────────────
+    region_num = 1
+    for region_data in state.get('regions', []):
+        material = region_data.get('material', 'silicon')
+        mat_kwargs = {}
+        if material in ('silicon', 'gaas', 'germanium', 'oxide'):
+            mat_kwargs[material] = True
+        reg = Region(
+            number=region_num,
+            x_min=float(region_data.get('x1', xmin)),
+            x_max=float(region_data.get('x2', xmax)),
+            y_min=float(region_data.get('y1', ymin)),
+            y_max=float(region_data.get('y2', ymax)),
+            **mat_kwargs
+        )
+        sim.add_region(reg)
+        region_num += 1
+
+    # ── Dopings ───────────────────────────────────────────
+    for doping_data in state.get('dopings', []):
+        species = doping_data.get('species', 'boron')
+        conc = float(doping_data.get('concentration', 1e17))
+        profile = doping_data.get('doping_type', 'uniform')
+        is_p = species in ('boron',)
+
+        if profile == 'gaussian':
+            peak_conc = float(doping_data.get('peak', conc * 10))
+            junction = float(doping_data.get('char_length', 0.1))
+            dop = (Doping.gaussian_p if is_p else Doping.gaussian_n)(
+                concentration=conc, junction=junction, peak=peak_conc)
+        else:
+            dop = (Doping.uniform_p if is_p else Doping.uniform_n)(concentration=conc)
+        sim.add_doping(dop)
+
+    # ── Electrodes ────────────────────────────────────────
+    elec_num = 1
+    for elec_data in state.get('electrodes', []):
+        position = elec_data.get('position', 'top')
+        x1 = float(elec_data.get('x1', xmin))
+        x2 = float(elec_data.get('x2', xmax))
+        # Map x coordinates to ix grid indices
+        ix_low = max(1, round((x1 - xmin) / (xmax - xmin) * (nx - 1)) + 1)
+        ix_high = min(nx, round((x2 - xmin) / (xmax - xmin) * (nx - 1)) + 1)
+        if position in ('top', 'bottom'):
+            iy = 1 if position == 'top' else ny
+            elec = Electrode(number=elec_num, ix_low=ix_low, ix_high=ix_high,
+                             iy_low=iy, iy_high=iy)
+        else:
+            ix = 1 if position == 'left' else nx
+            elec = Electrode(number=elec_num, ix_low=ix, ix_high=ix,
+                             iy_low=1, iy_high=ny)
+        sim.add_electrode(elec)
+        elec_num += 1
+
+    # ── Contacts ──────────────────────────────────────────
+    contacts = state.get('contacts', [])
+    if contacts:
+        for contact_data in contacts:
+            contact_type = contact_data.get('contact_type', 'ohmic')
+            if contact_type == 'schottky':
+                try:
+                    elec_ref = int(contact_data.get('electrode', 1))
+                except (ValueError, TypeError):
+                    elec_ref = 1
+                wf = float(contact_data.get('workfunction', 4.1))
+                sim.add_contact(Contact.schottky(number=elec_ref, workfunction=wf))
+            else:
+                # ohmic: apply to specific electrode or all
+                elec_ref = contact_data.get('electrode')
+                if elec_ref is not None:
+                    try:
+                        elec_ref = int(elec_ref)
+                    except (ValueError, TypeError):
+                        elec_ref = None
+                if elec_ref is not None:
+                    sim.add_contact(Contact.ohmic(number=elec_ref))
+                else:
+                    sim.add_contact(Contact.ohmic(all_contacts=True))
+    else:
+        sim.add_contact(Contact.ohmic(all_contacts=True))
+
+    # ── Solves ────────────────────────────────────────────
+    n_solves = 0
+    for i, solve_data in enumerate(state.get('solves', [])):
+        solve_type = solve_data.get('solve_type', '')
+        if solve_data.get('initial') or solve_type == 'equilibrium':
+            sim.add_solve(Solve.equilibrium(outfile=solve_data.get('outfile', 'sol_eq')))
+            n_solves += 1
+        elif solve_type == 'bias_sweep':
+            elec_num_int = int(solve_data.get('electrode', 1))
+            start = float(solve_data.get('start', 0.0))
+            stop = float(solve_data.get('stop', 1.0))
+            step = float(solve_data.get('step', 0.1))
+            sim.add_solve(Solve.bias_sweep(
+                electrode=elec_num_int,
+                start=start, stop=stop, step=step,
+                outfile=solve_data.get('outfile', f'sol_{i}'),
+                project=(n_solves >= 2)))
+            n_solves += 1
+        elif solve_data.get('biases'):
+            biases = solve_data['biases']
+            for elec_key, bias_val in biases.items():
+                try:
+                    elec_num_int = int(elec_key)
+                except (ValueError, TypeError):
+                    elec_num_int = 1
+                bval = float(bias_val)
+                step = bval / 5 if bval != 0 else 0.1
+                sim.add_solve(Solve.bias_sweep(
+                    electrode=elec_num_int,
+                    start=0.0, stop=bval, step=step,
+                    outfile=f'sol_{i}', project=(n_solves >= 2)))
+                n_solves += 1
+        else:
+            sim.add_solve(Solve.equilibrium(outfile=f'sol_{i}'))
+            n_solves += 1
+
+    # ── Logs ──────────────────────────────────────────────
+    # Log block generates I-V data or 1D physical quantity plots
+    for log_data in state.get('logs', []):
+        quantities = log_data.get('quantities', ['potential'])
+        if isinstance(quantities, str):
+            quantities = quantities.split()
+        filename = log_data.get('filename', 'output')
+
+        # IV log (default)
+        if 'iv' in quantities or not quantities:
+            sim.add_log(Log(ivfile=filename + '.log'))
+        else:
+            # Physical quantity plotting via Plot1D
+            from nanohubpadre.plotting import Plot1D
+            quantity_flags = {}
+            for q in quantities:
+                q = q.lower()
+                if q in ('potential', 'electrons', 'holes', 'doping', 'e_field',
+                          'qfn', 'qfp', 'band_val', 'band_con', 'recomb'):
+                    quantity_flags[q] = True
+            if quantity_flags:
+                sim.add_log(Plot1D(outfile=filename, ascii=True, **quantity_flags))
+
+    # Add IV log if solves include bias sweeps and no log is configured
+    if not state.get('logs'):
+        sim.add_log(Log(ivfile='iv.log'))
+
+    return sim.generate_deck()
+
+
+class _BuilderSimulationRunner:
+    """Thin runner for builder-created simulations."""
+
+    def __init__(self, simulation_id, state, output_dir, progress_callback=None):
+        self.simulation_id = simulation_id
+        self.state = state
+        self.output_dir = output_dir
+        self.progress_callback = progress_callback
+        self.thread = None
+        self.is_running = False
+        self.error = None
+        self.output_files = []
+        self.deck_content = ""
+
+    def start(self):
+        import threading
+        self.is_running = True
+        self.thread = threading.Thread(target=self._run, daemon=True)
+        self.thread.start()
+
+    def _update_progress(self, progress, message=""):
+        if self.progress_callback:
+            self.progress_callback(progress, message)
+
+    def _run(self):
+        import traceback
+        try:
+            self._update_progress(5, "Initializing builder simulation...")
+            deck = _build_deck_from_state(self.state)
+            self.deck_content = deck
+            self._update_progress(25, "Deck generated")
+
+            deck_file = os.path.join(self.output_dir, "padre_input.deck")
+            with open(deck_file, 'w') as f:
+                f.write(deck)
+            self.output_files.append(deck_file)
+
+            self._update_progress(30, "Running PADRE simulation...")
+
+            from nanohubpadre import Simulation as PadreSimulation
+            import tempfile
+            # Write deck to temp dir and run
+            tmp = tempfile.mkdtemp()
+            tmp_deck = os.path.join(tmp, "input.deck")
+            with open(tmp_deck, 'w') as f:
+                f.write(deck)
+
+            import subprocess
+            result = subprocess.run(
+                ['padre', tmp_deck],
+                cwd=self.output_dir,
+                capture_output=True,
+                text=True
+            )
+            self._update_progress(90, "Collecting outputs...")
+            if result.returncode != 0:
+                raise RuntimeError(f"PADRE failed (code {result.returncode}): {result.stderr or result.stdout}")
+
+            for fn in os.listdir(self.output_dir):
+                fp = os.path.join(self.output_dir, fn)
+                if os.path.isfile(fp) and fp not in self.output_files:
+                    self.output_files.append(fp)
+
+            self._update_progress(100, "Completed")
+        except Exception as e:
+            self.error = f"{e}\n{traceback.format_exc()}"
+            self._update_progress(100, f"Error: {e}")
+        finally:
+            self.is_running = False
 
 
 # ============= HELPER FUNCTIONS =============
