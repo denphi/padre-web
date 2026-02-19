@@ -7,6 +7,12 @@ import json
 from app.models import Simulation, SimulationStore, DevicePreset, SimulationStatus
 from app.simulation_runner import SimulationRunner
 
+try:
+    from nanohubpadre.parser import IVFileParser
+    _IV_PARSER_AVAILABLE = True
+except ImportError:
+    _IV_PARSER_AVAILABLE = False
+
 # Create blueprints
 main_bp = Blueprint('main', __name__)
 api_bp = Blueprint('api', __name__, url_prefix='/api')
@@ -516,7 +522,11 @@ def download_output_file(sim_id, filename):
         if not os.path.exists(filepath):
             return jsonify({'success': False, 'error': 'File not found'}), 404
 
-        return send_file(filepath, as_attachment=True, download_name=filename)
+        try:
+            return send_file(filepath, as_attachment=True, download_name=filename)
+        except TypeError:
+            # Flask < 2.0 uses attachment_filename instead of download_name
+            return send_file(filepath, as_attachment=True, attachment_filename=filename)
 
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
@@ -709,7 +719,41 @@ def _determine_variable(name_base):
 
 
 def _parse_iv_file(lines, data):
-    """Parse I-V characteristic file."""
+    """Parse PADRE I-V log file using the library parser."""
+    content = '\n'.join(lines)
+
+    if _IV_PARSER_AVAILABLE:
+        try:
+            parser = IVFileParser()
+            iv_data = parser.parse(content)
+            if iv_data.bias_points:
+                # Build rows: [V_electrode1, I_electrode1, V_electrode2, I_electrode2, ...]
+                # Use electrode 1 voltage as x-axis, all electrode currents as series
+                num_elec = iv_data.num_electrodes or 1
+                rows = []
+                columns = []
+                for e in range(1, num_elec + 1):
+                    voltages = iv_data.get_voltages(e)
+                    currents = iv_data.get_currents(e, 'total')
+                    if e == 1:
+                        # First electrode: use its voltage as x-axis
+                        for i, (v, c) in enumerate(zip(voltages, currents)):
+                            rows.append([float(v), float(c)])
+                        columns = ['Voltage (V)', f'I_elec{e} (A)']
+                    else:
+                        # Additional electrodes: append current column
+                        currents_list = list(currents)
+                        for i in range(min(len(rows), len(currents_list))):
+                            rows[i].append(float(currents_list[i]))
+                        columns.append(f'I_elec{e} (A)')
+                data['values'] = rows
+                data['columns'] = columns
+                data['num_electrodes'] = num_elec
+                return data
+        except Exception:
+            pass  # Fall through to simple parser
+
+    # Fallback: simple two-column parser (for non-PADRE IV files)
     values = []
     for line in lines:
         line = line.strip()
@@ -725,11 +769,9 @@ def _parse_iv_file(lines, data):
 
     if values:
         data['values'] = values
-        # Assume columns: voltage, current (and possibly more)
-        if len(values[0]) >= 2:
-            data['columns'] = ['Voltage (V)', 'Current (A)']
-            if len(values[0]) > 2:
-                data['columns'].extend([f'Column {i+1}' for i in range(2, len(values[0]))])
+        data['columns'] = ['Voltage (V)', 'Current (A)']
+        if len(values[0]) > 2:
+            data['columns'].extend([f'Column {i+1}' for i in range(2, len(values[0]))])
 
     return data
 
