@@ -424,6 +424,17 @@ class SimulationRunner:
             reverse_sweep=reverse_sweep,
         )
 
+        # Use Gummel+Newton coupling — pure Newton diverges on Schottky init solve.
+        sim.system = System(electrons=True, holes=True, gummel=True, newton=True)
+
+        # The factory emits `solve proj` for sweeps, which requires TWO prior solutions.
+        # The forward/reverse sweeps immediately follow the single `init` solve, so we
+        # must use `previous` (one prior solution) instead of `project` (two required).
+        for cmd in sim._commands:
+            if isinstance(cmd, Solve) and cmd.project:
+                cmd.project = False
+                cmd.previous = True
+
         return sim
     
     def _create_pin_diode_sim(self, temp_dir: str) -> Simulation:
