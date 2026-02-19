@@ -9,29 +9,47 @@
     <link rel="stylesheet" href="{{ base_path }}{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body>
-    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
-        <div class="container-fluid">
-            <a class="navbar-brand" href="{{ base_path }}/">
-                <i class="fas fa-microchip"></i> PADRE Web UI
+    <!-- ── Brand bar ─────────────────────────────────────────── -->
+    <header class="padre-header">
+        <div class="container-fluid px-4 d-flex align-items-center justify-content-between" style="height:64px;">
+            <!-- Left: nanoHUB logo + PADRE title -->
+            <a href="{{ base_path }}/" class="padre-brand d-flex align-items-center gap-3 text-decoration-none">
+                <img src="https://nanohub.org/app/site/media/images/PressKit/nanoHUB_logo_color.jpg"
+                     alt="nanoHUB" class="padre-nanohub-logo">
+                <div class="padre-title-group">
+                    <span class="padre-title">PADRE</span>
+                    <span class="padre-subtitle">Semiconductor Device Simulator</span>
+                </div>
             </a>
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
-                <span class="navbar-toggler-icon"></span>
+            <!-- Right: mobile toggler -->
+            <button class="navbar-toggler d-lg-none border-0" type="button"
+                    data-bs-toggle="collapse" data-bs-target="#padreNavTabs"
+                    style="color:#1a3a5c;">
+                <i class="fas fa-bars fa-lg"></i>
             </button>
-            <div class="collapse navbar-collapse" id="navbarNav">
-                <ul class="navbar-nav ms-auto">
-                    <li class="nav-item">
-                        <a class="nav-link" href="{{ base_path }}/">Dashboard</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="{{ base_path }}/devices">Devices</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="{{ base_path }}/builder">
-                            <i class="fas fa-drafting-compass"></i> Builder
-                        </a>
-                    </li>
-                </ul>
-            </div>
+        </div>
+    </header>
+
+    <!-- ── Tab navigation bar ────────────────────────────────── -->
+    <nav class="padre-tabnav" id="padreNavTabs">
+        <div class="container-fluid px-4">
+            <ul class="padre-tabs" id="mainNavTabs">
+                <li>
+                    <a href="{{ base_path }}/" data-path="/">
+                        <i class="fas fa-tachometer-alt"></i> Dashboard
+                    </a>
+                </li>
+                <li>
+                    <a href="{{ base_path }}/devices" data-path="/devices">
+                        <i class="fas fa-cog"></i> Devices
+                    </a>
+                </li>
+                <li>
+                    <a href="{{ base_path }}/builder" data-path="/builder">
+                        <i class="fas fa-drafting-compass"></i> Builder
+                    </a>
+                </li>
+            </ul>
         </div>
     </nav>
 
@@ -53,7 +71,19 @@
         const BASE_PATH = '{{ base_path }}';
     </script>
     <script src="{{ base_path }}{{ url_for('static', filename='js/utils.js') }}"></script>
-    <script>document.getElementById('footerYear').textContent = new Date().getFullYear();</script>
+    <script>
+        // Footer year
+        document.getElementById('footerYear').textContent = new Date().getFullYear();
+        // Highlight active nav tab
+        (function() {
+            const path = window.location.pathname.replace(BASE_PATH, '') || '/';
+            document.querySelectorAll('#mainNavTabs a').forEach(a => {
+                const ap = a.dataset.path;
+                const isActive = ap === '/' ? path === '/' : path.startsWith(ap);
+                if (isActive) a.classList.add('active');
+            });
+        })();
+    </script>
     {% block scripts %}{% endblock %}
 </body>
 </html>

@@ -7,6 +7,15 @@
     --danger-color: #dc3545;
     --warning-color: #ffc107;
     --info-color: #0dcaf0;
+    /* Header palette — matches nanoHUB blues */
+    --header-bg: #ffffff;
+    --header-border: #dde3ec;
+    --tabnav-bg: #1a3a5c;        /* deep navy */
+    --tabnav-active-bg: #ffffff;
+    --tabnav-active-color: #1a3a5c;
+    --tabnav-hover-bg: rgba(255,255,255,0.12);
+    --tabnav-color: rgba(255,255,255,0.82);
+    --tabnav-active-accent: #e87722;  /* nanoHUB orange accent */
 }
 
 body {
@@ -21,10 +30,109 @@ body {
     flex: 1;
 }
 
+/* ── Brand header ──────────────────────────────────────── */
+.padre-header {
+    background: var(--header-bg);
+    border-bottom: 1px solid var(--header-border);
+    box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+    position: sticky;
+    top: 0;
+    z-index: 1030;
+}
+
+.padre-nanohub-logo {
+    height: 36px;
+    width: auto;
+    object-fit: contain;
+    /* give it a subtle border-right separator */
+    padding-right: 16px;
+    border-right: 1px solid #dde3ec;
+    margin-right: 4px;
+}
+
+.padre-brand { color: inherit; }
+.padre-brand:hover { opacity: 0.85; }
+
+.padre-title-group {
+    display: flex;
+    flex-direction: column;
+    line-height: 1.15;
+}
+
+.padre-title {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #1a3a5c;
+    letter-spacing: 0.04em;
+}
+
+.padre-subtitle {
+    font-size: 0.68rem;
+    color: #5a7a9a;
+    letter-spacing: 0.02em;
+}
+
+/* ── Tab navigation bar ────────────────────────────────── */
+.padre-tabnav {
+    background: var(--tabnav-bg);
+    position: sticky;
+    top: 65px;         /* sits just below the brand header */
+    z-index: 1020;
+}
+
+.padre-tabs {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    gap: 0;
+}
+
+.padre-tabs li { display: flex; }
+
+.padre-tabs a {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 0 22px;
+    height: 44px;
+    color: var(--tabnav-color);
+    text-decoration: none;
+    font-size: 0.88rem;
+    font-weight: 500;
+    letter-spacing: 0.01em;
+    border-bottom: 3px solid transparent;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+    white-space: nowrap;
+}
+
+.padre-tabs a:hover {
+    background: var(--tabnav-hover-bg);
+    color: #ffffff;
+    border-bottom-color: rgba(255,255,255,0.35);
+}
+
+.padre-tabs a.active {
+    background: rgba(255,255,255,0.1);
+    color: #ffffff;
+    border-bottom-color: var(--tabnav-active-accent);
+    font-weight: 600;
+}
+
+/* Mobile collapse */
+@media (max-width: 991px) {
+    .padre-tabnav { top: 64px; }
+    .padre-tabs { flex-direction: column; }
+    .padre-tabs a { height: 48px; padding: 0 20px; border-bottom: none; border-left: 3px solid transparent; }
+    .padre-tabs a.active { border-left-color: var(--tabnav-active-accent); border-bottom: none; }
+    #padreNavTabs { display: none; }
+    #padreNavTabs.show { display: block; }
+}
+
+/* Keep legacy .navbar rules from breaking anything */
 .navbar {
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
-
 .navbar-brand {
     font-weight: 600;
     font-size: 1.25rem;
