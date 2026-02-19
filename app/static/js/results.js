@@ -1301,31 +1301,7 @@ async function loadIVData(files) {
 }
 
 function plotIVCurve(containerId, data, filename) {
-    const values = data.values;
-    if (!values || values.length === 0) return;
-
-    const voltages = values.map(row => row[0]);
-    const currents = values.map(row => row[1]);
-
-    const trace = {
-        x: voltages,
-        y: currents,
-        type: 'scatter',
-        mode: 'lines+markers',
-        name: 'I-V Characteristic',
-        line: { color: '#007bff', width: 2 },
-        marker: { size: 4 }
-    };
-
-    const layout = {
-        title: `I-V Characteristic - ${filename}`,
-        xaxis: { title: 'Voltage (V)', gridcolor: '#e0e0e0' },
-        yaxis: { title: 'Current (A)', gridcolor: '#e0e0e0', exponentformat: 'e' },
-        plot_bgcolor: '#fafafa',
-        paper_bgcolor: '#ffffff',
-        margin: { t: 50, r: 30, b: 50, l: 70 }
-    };
-
-    Plotly.newPlot(containerId, [trace], layout, { responsive: true });
+    plotIVData(containerId, data.values, filename, data.columns || []);
 }
+
 
