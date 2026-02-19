@@ -1174,25 +1174,48 @@ function plotMeshData(containerId, values, filename) {
     const x = values.map(row => row[0]);
     const y = values.map(row => row[1]);
 
-    const trace = {
-        x: x,
-        y: y,
-        type: 'scatter',
-        mode: 'markers',
-        name: 'Mesh Points',
-        marker: { size: 3, color: '#007bff' }
-    };
+    const uniqueX = [...new Set(x.map(v => +v.toFixed(4)))].sort((a, b) => a - b);
+    const uniqueY = [...new Set(y.map(v => +v.toFixed(4)))].sort((a, b) => a - b);
+
+    const traces = [];
+
+    // Vertical grid lines (constant X, sweep Y)
+    const vLineX = [], vLineY = [];
+    for (const xi of uniqueX) {
+        const ys = y.filter((_, i) => +x[i].toFixed(4) === xi).sort((a, b) => a - b);
+        for (const yi of ys) { vLineX.push(xi); vLineY.push(yi); }
+        vLineX.push(null); vLineY.push(null);
+    }
+    traces.push({ x: vLineX, y: vLineY, type: 'scatter', mode: 'lines',
+        name: 'Grid', line: { color: '#6c9fd4', width: 0.8 }, hoverinfo: 'skip' });
+
+    // Horizontal grid lines (constant Y, sweep X)
+    const hLineX = [], hLineY = [];
+    for (const yi of uniqueY) {
+        const xs = x.filter((_, i) => +y[i].toFixed(4) === yi).sort((a, b) => a - b);
+        for (const xi of xs) { hLineX.push(xi); hLineY.push(yi); }
+        hLineX.push(null); hLineY.push(null);
+    }
+    traces.push({ x: hLineX, y: hLineY, type: 'scatter', mode: 'lines',
+        name: 'Grid', showlegend: false, line: { color: '#6c9fd4', width: 0.8 }, hoverinfo: 'skip' });
+
+    // Node dots
+    traces.push({ x, y, type: 'scatter', mode: 'markers',
+        name: `${values.length} nodes`,
+        marker: { size: 2, color: '#1a5fa8', opacity: 0.7 },
+        hovertemplate: 'x: %{x:.3f} µm<br>y: %{y:.3f} µm<extra></extra>' });
 
     const layout = {
-        title: `Device Mesh - ${filename}`,
-        xaxis: { title: 'X (μm)', gridcolor: '#e0e0e0', scaleanchor: 'y', scaleratio: 1 },
-        yaxis: { title: 'Y (μm)', gridcolor: '#e0e0e0' },
+        title: `Device Mesh — ${values.length} nodes (${uniqueX.length}×${uniqueY.length})`,
+        xaxis: { title: 'X (µm)', gridcolor: '#e0e0e0', scaleanchor: 'y', scaleratio: 1 },
+        yaxis: { title: 'Y (µm)', gridcolor: '#e0e0e0', autorange: 'reversed' },
         plot_bgcolor: '#fafafa',
         paper_bgcolor: '#ffffff',
-        margin: { t: 50, r: 30, b: 50, l: 70 }
+        margin: { t: 50, r: 30, b: 50, l: 70 },
+        showlegend: false
     };
 
-    Plotly.newPlot(containerId, [trace], layout, { responsive: true });
+    Plotly.newPlot(containerId, traces, layout, { responsive: true });
 }
 
 function plotGenericData(containerId, values, filename, columns) {

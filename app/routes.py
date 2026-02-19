@@ -553,7 +553,16 @@ def get_file_content(sim_id, filename):
             return jsonify({'success': False, 'error': 'File not found'}), 404
 
         # Parse the file based on its type
-        data = _parse_padre_output_file(filepath, filename)
+        # For mesh files, look up simulation parameters to pass extents
+        sim_params = {}
+        try:
+            store = get_simulation_store()
+            sim = store.get(sim_id)
+            if sim:
+                sim_params = {**sim.parameters, **sim.outputs, **sim.sweep}
+        except Exception:
+            pass
+        data = _parse_padre_output_file(filepath, filename, sim_params=sim_params)
 
         # Add debug info
         data['debug'] = {
@@ -574,7 +583,7 @@ def get_file_content(sim_id, filename):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
-def _parse_padre_output_file(filepath, filename):
+def _parse_padre_output_file(filepath, filename, sim_params=None):
     """Parse a PADRE output file.
 
     Uses manual parsing that matches the format expected by nanohubpadre library.
@@ -676,7 +685,7 @@ def _parse_padre_output_file(filepath, filename):
         elif name_base == 'mesh' or name_base.endswith('.pg') or 'mesh' in name_base:
             data['type'] = 'mesh'
             data['variable'] = 'mesh'
-            data = _parse_mesh_file(lines, data)
+            data = _parse_mesh_file(filepath, lines, data, sim_params or {})
         elif _is_plot3d_file(name_base, content):
             # 2D contour (Plot3D scatter format): pot_eq, el_bias, hh_eq, ef_eq, dop_eq, etc.
             data = _parse_contour_file(filepath, name_base, data)
@@ -736,28 +745,37 @@ def _parse_iv_file(lines, data):
             parser = IVFileParser()
             iv_data = parser.parse(content)
             if iv_data.bias_points:
-                # Build rows: [V_electrode1, I_electrode1, V_electrode2, I_electrode2, ...]
-                # Use electrode 1 voltage as x-axis, all electrode currents as series
+                import numpy as np
                 num_elec = iv_data.num_electrodes or 1
-                rows = []
-                columns = []
+
+                # Find the electrode whose voltage varies most — that's the sweep axis
+                sweep_elec = 1
+                max_range = 0.0
                 for e in range(1, num_elec + 1):
-                    voltages = iv_data.get_voltages(e)
+                    v = iv_data.get_voltages(e)
+                    r = float(np.ptp(v)) if len(v) > 1 else 0.0
+                    if r > max_range:
+                        max_range = r
+                        sweep_elec = e
+
+                sweep_voltages = iv_data.get_voltages(sweep_elec)
+
+                # Build rows: [sweep_voltage, I_elec1, I_elec2, ...]
+                rows = []
+                for i, v in enumerate(sweep_voltages):
+                    rows.append([float(v)])
+
+                columns = [f'V_elec{sweep_elec} (V)']
+                for e in range(1, num_elec + 1):
                     currents = iv_data.get_currents(e, 'total')
-                    if e == 1:
-                        # First electrode: use its voltage as x-axis
-                        for i, (v, c) in enumerate(zip(voltages, currents)):
-                            rows.append([float(v), float(c)])
-                        columns = ['Voltage (V)', f'I_elec{e} (A)']
-                    else:
-                        # Additional electrodes: append current column
-                        currents_list = list(currents)
-                        for i in range(min(len(rows), len(currents_list))):
-                            rows[i].append(float(currents_list[i]))
-                        columns.append(f'I_elec{e} (A)')
+                    for i in range(min(len(rows), len(currents))):
+                        rows[i].append(float(currents[i]))
+                    columns.append(f'I_elec{e} (A)')
+
                 data['values'] = rows
                 data['columns'] = columns
                 data['num_electrodes'] = num_elec
+                data['sweep_electrode'] = sweep_elec
                 return data
         except Exception:
             pass  # Fall through to simple parser
@@ -889,24 +907,53 @@ def _parse_contour_file(filepath, name_base, data):
     return data
 
 
-def _parse_mesh_file(lines, data):
-    """Parse mesh file."""
+def _parse_mesh_file(filepath, lines, data, sim_params):
+    """Parse PADRE mesh file using the library parser."""
+    try:
+        from nanohubpadre.solution import SolutionParser
+        parser = SolutionParser()
+        # Extract device extents from simulation parameters (in µm)
+        x_extent = float(sim_params.get('length',
+                         sim_params.get('device_width',
+                         sim_params.get('width', 2.0))))
+        y_extent = float(sim_params.get('device_depth',
+                         sim_params.get('depth',
+                         sim_params.get('height', 2.0))))
+        x_coords, y_coords = parser.parse_mesh_file(filepath,
+                                                     x_extent=x_extent,
+                                                     y_extent=y_extent)
+        if len(x_coords) > 0:
+            values = [[float(x), float(y)] for x, y in zip(x_coords, y_coords)]
+            data['values'] = values
+            data['columns'] = ['X (µm)', 'Y (µm)']
+            return data
+    except Exception:
+        pass
+
+    # Fallback: scan for pairs of small floats (coordinates in cm, convert to µm)
     values = []
     for line in lines:
-        line = line.strip()
-        if not line or line.startswith('#') or line.startswith('!'):
-            continue
         parts = line.split()
-        if len(parts) >= 2:
+        for part in parts:
             try:
-                row = [float(p) for p in parts]
-                values.append(row)
+                v = float(part)
+                # Coordinates are small positive values (0–0.001 cm = 0–10 µm)
+                if 0 <= v < 0.001:
+                    values.append(v * 1e4)  # cm → µm
             except ValueError:
                 continue
 
-    if values:
-        data['values'] = values
-        data['columns'] = ['X (um)', 'Y (um)']
+    # Deduplicate and sort unique coordinate values — these are 1D grid lines
+    unique_vals = sorted(set(round(v, 4) for v in values))
+    if unique_vals:
+        # We only have 1D coordinate lists; emit as a scatter of all (x,y) grid crossings
+        # by combining first half as X candidates and second half as Y candidates
+        mid = len(unique_vals) // 2
+        x_vals = unique_vals[:mid] or unique_vals
+        y_vals = unique_vals[mid:] or unique_vals
+        rows = [[x, y] for x in x_vals for y in y_vals]
+        data['values'] = rows
+        data['columns'] = ['X (µm)', 'Y (µm)']
 
     return data
 
