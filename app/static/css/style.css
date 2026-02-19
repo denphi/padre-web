@@ -961,3 +961,128 @@ code {
     padding-left: 1rem;
     background-color: #f9fafb;
 }
+
+/* ============================================
+   Simulation Detail — Redesigned Layout
+   ============================================ */
+
+.sim-detail-title {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--primary-color);
+    letter-spacing: 0.01em;
+}
+
+.sim-action-bar {
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 0.75rem;
+}
+
+/* Compact step indicators */
+.sim-steps {
+    position: relative;
+    display: flex;
+    align-items: flex-start;
+    gap: 0;
+}
+
+.sim-steps::before {
+    content: '';
+    position: absolute;
+    top: 10px;
+    left: 5%;
+    right: 5%;
+    height: 1px;
+    background-color: var(--border-color);
+}
+
+.sim-step {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    flex: 1;
+    position: relative;
+    z-index: 1;
+    gap: 3px;
+}
+
+.sim-step-connector {
+    flex: 1;
+    height: 1px;
+    background: var(--border-color);
+    align-self: flex-start;
+    margin-top: 10px;
+    z-index: 0;
+}
+
+.sim-step-dot {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: #fff;
+    border: 1.5px solid var(--border-color);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.6rem;
+    color: var(--text-muted);
+    transition: all 0.2s;
+}
+
+.sim-step-label {
+    font-size: 0.65rem;
+    font-weight: 500;
+    color: var(--text-muted);
+    letter-spacing: 0.02em;
+    text-align: center;
+}
+
+.sim-step-time {
+    font-size: 0.6rem;
+    color: #b0bec8;
+    text-align: center;
+}
+
+/* Step states */
+.sim-step.completed .sim-step-dot {
+    background: var(--success-color);
+    border-color: var(--success-color);
+    color: #fff;
+}
+.sim-step.active .sim-step-dot {
+    background: var(--warning-color);
+    border-color: var(--warning-color);
+    color: #fff;
+}
+.sim-step.error .sim-step-dot {
+    background: var(--danger-color);
+    border-color: var(--danger-color);
+    color: #fff;
+}
+
+/* PADRE Deck side panel */
+.deck-side-panel {
+    font-family: 'Courier New', monospace;
+    font-size: 0.72rem;
+    line-height: 1.55;
+    background-color: #1a1d23;
+    color: #d4d4d4;
+    border-radius: 0;
+    padding: 1rem;
+    overflow-y: auto;
+    min-height: 300px;
+    max-height: calc(100vh - 240px);
+}
+
+/* Chevron rotation for collapse toggles */
+.sim-collapse-icon {
+    font-size: 0.7rem;
+    transition: transform 0.2s ease;
+}
+.sim-collapse-icon.rotated {
+    transform: rotate(180deg);
+}
+
+.fw-500 {
+    font-weight: 500;
+}

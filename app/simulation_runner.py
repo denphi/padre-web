@@ -185,9 +185,30 @@ class SimulationRunner:
         # 2D contour map quantities
         contour_quantities = _build_contour_quantities(p)
 
+        channel_length = p.get('channel_length', 0.025)
+        gate_oxide_thickness = p.get('gate_oxide_thickness', 0.005)
+        # device_width must be larger than channel_length; use 4x channel length or at least 0.1
+        device_width = max(channel_length * 4.0, 0.1)
+        # device_depth scales with oxide thickness; ensure it's reasonable
+        device_depth = max(gate_oxide_thickness * 4.0, 0.05)
+        junction_depth = min(gate_oxide_thickness * 3.0, device_depth * 0.4)
+
+        nx = p.get('nx', 45)
+        ny = p.get('ny', 45)
+        # Enforce mesh node limit
+        if nx * ny > 2400:
+            scale = (2400 / (nx * ny)) ** 0.5
+            nx = max(20, int(nx * scale))
+            ny = max(20, int(ny * scale))
+
         sim = create_mosfet(
-            channel_length=p.get('channel_length', 0.18),
-            gate_oxide_thickness=p.get('gate_oxide_thickness', 0.005),
+            channel_length=channel_length,
+            gate_oxide_thickness=gate_oxide_thickness,
+            junction_depth=junction_depth,
+            device_width=device_width,
+            device_depth=device_depth,
+            nx=nx,
+            ny=ny,
             substrate_doping=p.get('substrate_doping', 1e17),
             device_type=device_type,
             temperature=p.get('temperature', 300),
@@ -207,7 +228,9 @@ class SimulationRunner:
     def _create_mesfet_sim(self, temp_dir: str) -> Simulation:
         """Create MESFET simulation."""
         p = self.parameters
-        device_type = p.get('device_type', 'n')
+        # Normalize device_type: factory expects 'n' or 'p' only
+        raw_type = p.get('device_type', 'n').lower()
+        device_type = 'p' if 'p' in raw_type else 'n'
 
         # Build sweep tuple if enabled (with validation)
         vds_sweep = None
@@ -219,9 +242,18 @@ class SimulationRunner:
 
         contour_quantities = _build_contour_quantities(p)
 
+        nx = p.get('nx', 40)
+        ny = p.get('ny', 30)
+        if nx * ny > 2400:
+            scale = (2400 / (nx * ny)) ** 0.5
+            nx = max(20, int(nx * scale))
+            ny = max(20, int(ny * scale))
+
         sim = create_mesfet(
             channel_length=p.get('channel_length', 0.2),
             channel_doping=p.get('channel_doping', 1e17),
+            nx=nx,
+            ny=ny,
             device_type=device_type,
             temperature=p.get('temperature', 300),
             conmob=p.get('conmob', True),
@@ -369,6 +401,8 @@ class SimulationRunner:
 
         sim = create_schottky_diode(
             length=p.get('length', 2.0),
+            nx=p.get('nx', 50),
+            ny=p.get('ny', 20),
             doping=p.get('n_doping', 1e16),
             workfunction=p.get('barrier_height', 4.8),
             temperature=p.get('temperature', 300),

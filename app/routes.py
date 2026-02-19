@@ -241,6 +241,61 @@ def run_simulation(sim_id):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+@simulation_bp.route('/rerun/<sim_id>', methods=['POST'])
+def rerun_simulation(sim_id):
+    """Reset a completed/failed simulation and run it again."""
+    try:
+        store = get_simulation_store()
+        sim = store.get(sim_id)
+
+        if not sim:
+            return jsonify({'success': False, 'error': 'Simulation not found'}), 404
+
+        if sim.status == SimulationStatus.RUNNING:
+            return jsonify({'success': False, 'error': 'Simulation is already running'}), 400
+
+        # Reset state back to pending
+        store.update(
+            sim_id,
+            status=SimulationStatus.PENDING,
+            progress=0.0,
+            started_at=None,
+            completed_at=None,
+            error_message=None,
+            deck_content=None,
+        )
+
+        # Create output directory (clear old outputs)
+        output_dir = os.path.join(current_app.config['OUTPUTS_FOLDER'], sim_id)
+        if os.path.exists(output_dir):
+            import shutil
+            shutil.rmtree(output_dir)
+        os.makedirs(output_dir, exist_ok=True)
+
+        # Update status to running
+        store.update(sim_id, status=SimulationStatus.RUNNING, started_at=datetime.now(), progress=0.0)
+
+        runner = SimulationRunner(
+            simulation_id=sim_id,
+            device_type=sim.device_type,
+            parameters=sim.parameters,
+            output_dir=output_dir,
+            progress_callback=lambda prog, msg: _on_simulation_progress(sim_id, prog, msg)
+        )
+
+        _running_simulations[sim_id] = runner
+        runner.start()
+
+        return jsonify({
+            'success': True,
+            'message': 'Simulation restarted',
+            'simulation': store.get(sim_id).to_dict()
+        }), 202
+
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @simulation_bp.route('/<sim_id>')
 def get_simulation(sim_id):
     """Get simulation details."""

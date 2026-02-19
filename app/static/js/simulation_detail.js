@@ -10,6 +10,19 @@ document.addEventListener('DOMContentLoaded', () => {
     deckFullscreenModal = new bootstrap.Modal(document.getElementById('deckFullscreenModal'));
     loadSimulationDetails();
     setupEventHandlers();
+
+    // Rotate chevron on collapse toggle
+    document.querySelectorAll('[data-bs-toggle="collapse"]').forEach(trigger => {
+        const targetId = trigger.getAttribute('data-bs-target');
+        const target = document.querySelector(targetId);
+        if (!target) return;
+        target.addEventListener('show.bs.collapse', () => {
+            trigger.querySelector('.sim-collapse-icon')?.classList.add('rotated');
+        });
+        target.addEventListener('hide.bs.collapse', () => {
+            trigger.querySelector('.sim-collapse-icon')?.classList.remove('rotated');
+        });
+    });
 });
 
 async function loadSimulationDetails() {
@@ -20,7 +33,6 @@ async function loadSimulationDetails() {
             currentSimulation = result.simulation;
             renderSimulationDetails();
 
-            // Start polling if running
             if (currentSimulation.status === 'running') {
                 startStatusPolling();
             }
@@ -39,22 +51,14 @@ function renderSimulationDetails() {
     document.getElementById('simDescription').textContent =
         `Device: ${sim.device_type.toUpperCase()} • Created: ${formatDate(sim.created_at)}`;
 
-    // Status badges
+    // Status badge
     const statusBadge = document.getElementById('statusBadge');
     statusBadge.textContent = sim.status.toUpperCase();
     statusBadge.className = `badge ${getStatusBadgeClass(sim.status)}`;
 
-    const progressStatusBadge = document.getElementById('progressStatusBadge');
-    progressStatusBadge.textContent = sim.status.toUpperCase();
-    progressStatusBadge.className = `badge ${getStatusBadgeClass(sim.status)}`;
-
-    // Progress bar
+    // Progress bar + message
     updateProgressBar(sim.progress, sim.status);
-
-    // Progress message
     updateProgressMessage(sim);
-
-    // Update timeline
     updateProgressTimeline(sim);
 
     // Parameters
@@ -68,7 +72,7 @@ function renderSimulationDetails() {
         document.getElementById('copyDeckBtn').disabled = false;
         document.getElementById('expandDeckBtn').disabled = false;
     } else {
-        document.getElementById('deckNotGenerated').style.display = 'block';
+        document.getElementById('deckNotGenerated').style.display = '';
         document.getElementById('deckDisplay').style.display = 'none';
         document.getElementById('copyDeckBtn').disabled = true;
         document.getElementById('expandDeckBtn').disabled = true;
@@ -81,15 +85,15 @@ function renderSimulationDetails() {
     document.getElementById('infoCompleted').textContent = formatDate(sim.completed_at);
 
     // Error
+    const errorInfo = document.getElementById('errorInfo');
     if (sim.error_message) {
-        document.getElementById('errorInfo').style.display = 'block';
+        errorInfo.style.removeProperty('display');
         document.getElementById('errorMessage').textContent = sim.error_message;
         addLogEntry('Error: ' + sim.error_message.split('\n')[0], 'error');
     } else {
-        document.getElementById('errorInfo').style.display = 'none';
+        errorInfo.style.setProperty('display', 'none', 'important');
     }
 
-    // Update buttons state
     updateButtonStates();
 }
 
@@ -99,16 +103,13 @@ function updateProgressBar(progress, status) {
     progressBar.setAttribute('aria-valuenow', progress);
     document.getElementById('progressText').textContent = `${Math.round(progress)}%`;
 
-    // Update bar color based on status
-    progressBar.classList.remove('bg-success', 'bg-danger', 'bg-warning');
+    progressBar.classList.remove('bg-success', 'bg-danger', 'bg-warning', 'progress-bar-animated', 'progress-bar-striped');
     if (status === 'completed') {
         progressBar.classList.add('bg-success');
-        progressBar.classList.remove('progress-bar-animated');
     } else if (status === 'failed') {
         progressBar.classList.add('bg-danger');
-        progressBar.classList.remove('progress-bar-animated');
     } else if (status === 'running') {
-        progressBar.classList.add('progress-bar-animated');
+        progressBar.classList.add('progress-bar-animated', 'progress-bar-striped');
     }
 }
 
@@ -126,7 +127,7 @@ function updateProgressMessage(sim) {
             message = 'Configuring device...';
         } else if (sim.progress < 30) {
             message = 'Generating input deck...';
-        } else if (sim.progress < 100) {
+        } else {
             message = 'Running simulation...';
         }
         iconClass = 'fas fa-spinner fa-spin text-warning';
@@ -134,14 +135,13 @@ function updateProgressMessage(sim) {
         message = 'Simulation completed successfully!';
         iconClass = 'fas fa-check-circle text-success';
     } else if (sim.status === 'failed') {
-        message = 'Simulation failed. Check error details below.';
+        message = 'Simulation failed.';
         iconClass = 'fas fa-exclamation-circle text-danger';
     }
 
     messageEl.textContent = message;
     containerEl.querySelector('i').className = iconClass;
 
-    // Add to log if progress changed
     if (sim.progress !== lastProgress && sim.status === 'running') {
         addLogEntry(message, 'info');
         lastProgress = sim.progress;
@@ -149,11 +149,11 @@ function updateProgressMessage(sim) {
 }
 
 function updateProgressTimeline(sim) {
-    const steps = document.querySelectorAll('.timeline-step');
+    const steps = document.querySelectorAll('.sim-step');
 
     steps.forEach(step => {
         const stepName = step.dataset.step;
-        const icon = step.querySelector('.timeline-icon i');
+        const icon = step.querySelector('.sim-step-dot i');
 
         step.classList.remove('completed', 'active', 'error');
         icon.className = 'fas fa-circle';
@@ -165,7 +165,7 @@ function updateProgressTimeline(sim) {
             step.classList.add('completed');
             icon.className = 'fas fa-check-circle';
         } else if (sim.status === 'running') {
-            let stepProgress = getStepProgress(stepName);
+            const stepProgress = getStepProgress(stepName);
             if (sim.progress >= stepProgress) {
                 step.classList.add('completed');
                 icon.className = 'fas fa-check-circle';
@@ -176,7 +176,6 @@ function updateProgressTimeline(sim) {
         }
     });
 
-    // Update timestamps
     if (sim.started_at) {
         document.getElementById('stepTimeInit').textContent = formatTime(sim.started_at);
     }
@@ -192,19 +191,13 @@ function updateProgressTimeline(sim) {
 }
 
 function getStepProgress(stepName) {
-    const stepProgressMap = {
-        'init': 5,
-        'device': 15,
-        'deck': 25,
-        'simulation': 100
-    };
+    const stepProgressMap = { init: 5, device: 15, deck: 25, simulation: 100 };
     return stepProgressMap[stepName] || 0;
 }
 
 function formatTime(dateString) {
     if (!dateString) return '-';
-    const date = new Date(dateString);
-    return date.toLocaleTimeString();
+    return new Date(dateString).toLocaleTimeString();
 }
 
 function addLogEntry(message, type = 'info') {
@@ -221,7 +214,6 @@ function addLogEntry(message, type = 'info') {
     log.appendChild(entry);
     log.scrollTop = log.scrollHeight;
 
-    // Keep log entries limited
     while (log.children.length > 50) {
         log.removeChild(log.firstChild);
     }
@@ -230,42 +222,46 @@ function addLogEntry(message, type = 'info') {
 function updateButtonStates() {
     const sim = currentSimulation;
     const runBtn = document.getElementById('runSimBtn');
+    const rerunBtn = document.getElementById('rerunSimBtn');
     const stopBtn = document.getElementById('stopSimBtn');
     const viewResultsBtn = document.getElementById('viewResultsBtn');
     const downloadDeckBtn = document.getElementById('downloadDeckBtn');
     const deleteBtn = document.getElementById('deleteSimBtn');
 
-    // Run button
+    // Run: only for pending
     runBtn.disabled = sim.status !== 'pending';
+    runBtn.style.display = sim.status === 'pending' ? '' : 'none';
 
-    // Stop button
-    stopBtn.style.display = sim.status === 'running' ? 'block' : 'none';
+    // Rerun: for completed or failed
+    const canRerun = sim.status === 'completed' || sim.status === 'failed';
+    rerunBtn.style.display = canRerun ? '' : 'none';
+    rerunBtn.disabled = false;
+
+    // Stop: only while running
+    stopBtn.style.display = sim.status === 'running' ? '' : 'none';
     stopBtn.disabled = sim.status !== 'running';
 
-    // View results button
+    // View results
     viewResultsBtn.disabled = sim.status !== 'completed';
     viewResultsBtn.href = `${getBasePath()}/results/${simId}`;
 
-    // Download deck button
+    // Download deck
     downloadDeckBtn.disabled = !sim.deck_content;
 
-    // Delete button
+    // Delete: disabled while running
     deleteBtn.disabled = sim.status === 'running';
 }
 
 function setupEventHandlers() {
     document.getElementById('runSimBtn').addEventListener('click', runSimulation);
+    document.getElementById('rerunSimBtn').addEventListener('click', rerunSimulation);
     document.getElementById('stopSimBtn').addEventListener('click', stopSimulation);
     document.getElementById('copyDeckBtn').addEventListener('click', () => {
-        if (currentSimulation.deck_content) {
-            copyToClipboard(currentSimulation.deck_content);
-        }
+        if (currentSimulation.deck_content) copyToClipboard(currentSimulation.deck_content);
     });
     document.getElementById('downloadDeckBtn').addEventListener('click', downloadDeck);
     document.getElementById('deleteSimBtn').addEventListener('click', deleteSimulation);
-    document.getElementById('clearLogBtn').addEventListener('click', clearLog);
 
-    // Expand deck button
     document.getElementById('expandDeckBtn').addEventListener('click', () => {
         if (currentSimulation.deck_content) {
             document.getElementById('deckFullscreenContent').textContent = currentSimulation.deck_content;
@@ -273,11 +269,8 @@ function setupEventHandlers() {
         }
     });
 
-    // Fullscreen modal copy button
     document.getElementById('copyFullscreenDeckBtn').addEventListener('click', () => {
-        if (currentSimulation.deck_content) {
-            copyToClipboard(currentSimulation.deck_content);
-        }
+        if (currentSimulation.deck_content) copyToClipboard(currentSimulation.deck_content);
     });
 }
 
@@ -294,9 +287,7 @@ function clearLog() {
 async function runSimulation() {
     try {
         addLogEntry('Starting simulation...', 'info');
-
         const result = await apiCall(`/api/simulation/run/${simId}`, 'POST');
-
         if (result.success) {
             currentSimulation = result.simulation;
             renderSimulationDetails();
@@ -311,14 +302,42 @@ async function runSimulation() {
     }
 }
 
+async function rerunSimulation() {
+    const btn = document.getElementById('rerunSimBtn');
+    const origHTML = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Rerunning...';
+
+    try {
+        addLogEntry('Requesting rerun...', 'info');
+        const result = await apiCall(`/api/simulation/rerun/${simId}`, 'POST');
+        if (result.success) {
+            currentSimulation = result.simulation;
+            lastProgress = 0;
+            renderSimulationDetails();
+            showAlert('Simulation restarted!', 'success');
+            addLogEntry('Simulation restarted', 'success');
+            startStatusPolling();
+        } else {
+            btn.disabled = false;
+            btn.innerHTML = origHTML;
+            showAlert(`Error: ${result.error || 'Could not rerun simulation'}`, 'danger');
+        }
+    } catch (error) {
+        console.error('Error rerunning simulation:', error);
+        btn.disabled = false;
+        btn.innerHTML = origHTML;
+        showAlert(`Error: ${error.message}`, 'danger');
+        addLogEntry(`Failed to rerun: ${error.message}`, 'error');
+    }
+}
+
 function stopSimulation() {
-    // TODO: Implement simulation stopping
     showAlert('Stop simulation feature coming soon!', 'info');
 }
 
 function downloadDeck() {
     if (!currentSimulation.deck_content) return;
-
     const element = document.createElement('a');
     element.setAttribute('href', 'data:text/plain;charset=utf-8,' +
         encodeURIComponent(currentSimulation.deck_content));
@@ -335,11 +354,10 @@ async function deleteSimulation() {
     const btn = document.getElementById('deleteSimBtn');
     const origHTML = btn.innerHTML;
     btn.disabled = true;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Deleting…';
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Deleting...';
 
     try {
         const result = await apiCall(`/api/simulation/${simId}`, 'DELETE');
-
         if (result.success) {
             showAlert('Simulation deleted!', 'success');
             setTimeout(() => window.location.href = getBasePath() + '/', 1000);
@@ -367,14 +385,12 @@ function startStatusPolling() {
                 currentSimulation = result.simulation;
                 renderSimulationDetails();
 
-                // Add completion log entry
                 if (previousStatus === 'running' && currentSimulation.status === 'completed') {
                     addLogEntry('Simulation completed successfully!', 'success');
                 } else if (previousStatus === 'running' && currentSimulation.status === 'failed') {
                     addLogEntry('Simulation failed!', 'error');
                 }
 
-                // Stop polling if not running
                 if (currentSimulation.status !== 'running') {
                     statusPoller.stop();
                 }

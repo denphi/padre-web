@@ -1,212 +1,206 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="row mb-4">
-    <div class="col-lg-12">
-        <a href="{{ base_path }}/" class="btn btn-secondary btn-sm mb-3">
-            <i class="fas fa-arrow-left"></i> Back to Dashboard
+
+<!-- Page Header + Action Bar -->
+<div class="sim-detail-header mb-3">
+    <div class="d-flex align-items-center gap-2 mb-2">
+        <a href="{{ base_path }}/" class="btn btn-sm btn-outline-secondary">
+            <i class="fas fa-arrow-left"></i> Back
         </a>
-        <h1 class="mb-0">
-            <i class="fas fa-flask"></i> Simulation Details
-        </h1>
+        <span id="statusBadge" class="badge">PENDING</span>
+        <h2 class="mb-0 flex-grow-1 sim-detail-title" id="simTitle">Loading...</h2>
+    </div>
+    <p class="text-muted small mb-0" id="simDescription"></p>
+</div>
+
+<!-- Action Bar -->
+<div class="sim-action-bar mb-4 d-flex flex-wrap gap-2 align-items-center">
+    <button class="btn btn-primary" id="runSimBtn" disabled>
+        <i class="fas fa-play me-1"></i> Run
+    </button>
+    <button class="btn btn-primary" id="rerunSimBtn" style="display:none;">
+        <i class="fas fa-redo me-1"></i> Rerun
+    </button>
+    <button class="btn btn-danger" id="stopSimBtn" style="display:none;">
+        <i class="fas fa-stop me-1"></i> Stop
+    </button>
+    <a class="btn btn-secondary" id="viewResultsBtn" disabled href="#">
+        <i class="fas fa-chart-bar me-1"></i> View Results
+    </a>
+    <button class="btn btn-outline-secondary" id="downloadDeckBtn" disabled>
+        <i class="fas fa-download me-1"></i> Download Deck
+    </button>
+    <div class="ms-auto">
+        <button class="btn btn-outline-danger btn-sm" id="deleteSimBtn">
+            <i class="fas fa-trash me-1"></i> Delete
+        </button>
     </div>
 </div>
 
-<div class="row mb-4" id="simulationHeader">
-    <div class="col-lg-12">
-        <div class="card">
+<!-- Error Alert (shown when failed) -->
+<div id="errorInfo" class="alert alert-danger d-flex gap-2 align-items-start mb-4" style="display:none !important;">
+    <i class="fas fa-exclamation-triangle mt-1 flex-shrink-0"></i>
+    <div>
+        <strong>Error</strong>
+        <div id="errorMessage" class="small mt-1"></div>
+    </div>
+</div>
+
+<!-- Main Layout: left info + right deck -->
+<div class="row g-4">
+
+    <!-- Left Column -->
+    <div class="col-lg-5">
+
+        <!-- Status / Progress Card -->
+        <div class="card mb-3">
             <div class="card-body">
-                <div class="row">
-                    <div class="col-md-8">
-                        <h3 id="simTitle">Loading...</h3>
-                        <p class="text-muted mb-0" id="simDescription"></p>
+                <!-- Status row -->
+                <div class="d-flex align-items-center gap-2 mb-3">
+                    <div id="currentStatusMessage" class="d-flex align-items-center gap-2 small text-muted flex-grow-1">
+                        <i class="fas fa-info-circle text-primary"></i>
+                        <span id="progressMessage">Waiting to start...</span>
                     </div>
-                    <div class="col-md-4 text-end">
-                        <div class="badge bg-primary" id="statusBadge">PENDING</div>
-                    </div>
+                    <span class="text-muted small" id="progressText">0%</span>
                 </div>
-            </div>
-        </div>
-    </div>
-</div>
 
-<div class="row">
-    <div class="col-lg-8">
-        <!-- Progress Card -->
-        <div class="card mb-4">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <h5 class="mb-0"><i class="fas fa-tasks"></i> Simulation Progress</h5>
-                <span class="badge" id="progressStatusBadge">PENDING</span>
-            </div>
-            <div class="card-body">
                 <!-- Progress Bar -->
-                <div class="progress mb-3" style="height: 30px;">
+                <div class="progress mb-3" style="height: 6px;">
                     <div class="progress-bar progress-bar-striped progress-bar-animated" id="progressBar"
                          role="progressbar" style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
-                        <span id="progressText">0%</span>
                     </div>
                 </div>
 
-                <!-- Current Status Message -->
-                <div class="current-status-message mb-3" id="currentStatusMessage">
-                    <i class="fas fa-info-circle text-primary"></i>
-                    <span id="progressMessage">Waiting to start...</span>
-                </div>
-
-                <!-- Progress Steps Timeline -->
-                <div class="progress-timeline" id="progressTimeline">
-                    <div class="timeline-step" data-step="init">
-                        <div class="timeline-icon">
-                            <i class="fas fa-circle"></i>
-                        </div>
-                        <div class="timeline-content">
-                            <div class="timeline-title">Initialization</div>
-                            <div class="timeline-time" id="stepTimeInit">-</div>
-                        </div>
+                <!-- Timeline steps (compact) -->
+                <div class="sim-steps d-flex justify-content-between">
+                    <div class="sim-step" data-step="init">
+                        <div class="sim-step-dot"><i class="fas fa-circle"></i></div>
+                        <div class="sim-step-label">Init</div>
+                        <div class="sim-step-time" id="stepTimeInit">-</div>
                     </div>
-                    <div class="timeline-step" data-step="device">
-                        <div class="timeline-icon">
-                            <i class="fas fa-circle"></i>
-                        </div>
-                        <div class="timeline-content">
-                            <div class="timeline-title">Device Configuration</div>
-                            <div class="timeline-time" id="stepTimeDevice">-</div>
-                        </div>
+                    <div class="sim-step-connector"></div>
+                    <div class="sim-step" data-step="device">
+                        <div class="sim-step-dot"><i class="fas fa-circle"></i></div>
+                        <div class="sim-step-label">Device</div>
+                        <div class="sim-step-time" id="stepTimeDevice">-</div>
                     </div>
-                    <div class="timeline-step" data-step="deck">
-                        <div class="timeline-icon">
-                            <i class="fas fa-circle"></i>
-                        </div>
-                        <div class="timeline-content">
-                            <div class="timeline-title">Deck Generation</div>
-                            <div class="timeline-time" id="stepTimeDeck">-</div>
-                        </div>
+                    <div class="sim-step-connector"></div>
+                    <div class="sim-step" data-step="deck">
+                        <div class="sim-step-dot"><i class="fas fa-circle"></i></div>
+                        <div class="sim-step-label">Deck</div>
+                        <div class="sim-step-time" id="stepTimeDeck">-</div>
                     </div>
-                    <div class="timeline-step" data-step="simulation">
-                        <div class="timeline-icon">
-                            <i class="fas fa-circle"></i>
-                        </div>
-                        <div class="timeline-content">
-                            <div class="timeline-title">Simulation Complete</div>
-                            <div class="timeline-time" id="stepTimeSimulation">-</div>
-                        </div>
+                    <div class="sim-step-connector"></div>
+                    <div class="sim-step" data-step="simulation">
+                        <div class="sim-step-dot"><i class="fas fa-circle"></i></div>
+                        <div class="sim-step-label">Done</div>
+                        <div class="sim-step-time" id="stepTimeSimulation">-</div>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- Progress Log Card -->
-        <div class="card mb-4">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <h5 class="mb-0"><i class="fas fa-list-alt"></i> Progress Log</h5>
-                <button class="btn btn-sm btn-outline-secondary" id="clearLogBtn">
-                    <i class="fas fa-eraser"></i> Clear
-                </button>
-            </div>
-            <div class="card-body p-0">
-                <div id="progressLog" class="progress-log">
-                    <div class="log-entry log-info">
-                        <span class="log-time">--:--:--</span>
-                        <span class="log-message">Simulation created, waiting to run...</span>
+        <!-- Information (compact) -->
+        <div class="card mb-3">
+            <div class="card-body small">
+                <div class="row g-2">
+                    <div class="col-6">
+                        <span class="text-muted">Device</span><br>
+                        <strong id="infoDeviceType">-</strong>
+                    </div>
+                    <div class="col-6">
+                        <span class="text-muted">Created</span><br>
+                        <span id="infoCreated">-</span>
+                    </div>
+                    <div class="col-6">
+                        <span class="text-muted">Started</span><br>
+                        <span id="infoStarted">-</span>
+                    </div>
+                    <div class="col-6">
+                        <span class="text-muted">Completed</span><br>
+                        <span id="infoCompleted">-</span>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- Input Parameters Card -->
-        <div class="card mb-4">
-            <div class="card-header">
-                <h5 class="mb-0"><i class="fas fa-sliders-h"></i> Input Parameters</h5>
+        <!-- Input Parameters (collapsible) -->
+        <div class="card mb-3">
+            <div class="card-header py-2 d-flex align-items-center" style="cursor:pointer;"
+                 data-bs-toggle="collapse" data-bs-target="#parametersCollapse" aria-expanded="false">
+                <i class="fas fa-sliders-h me-2 text-muted"></i>
+                <span class="fw-500 small">Input Parameters</span>
+                <i class="fas fa-chevron-down ms-auto text-muted sim-collapse-icon"></i>
             </div>
-            <div class="card-body">
-                <div id="parametersDisplay"></div>
+            <div class="collapse" id="parametersCollapse">
+                <div class="card-body">
+                    <div id="parametersDisplay"></div>
+                </div>
             </div>
         </div>
 
-        <!-- PADRE Input Deck Card -->
+        <!-- Progress Log (collapsible) -->
         <div class="card">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <h5 class="mb-0"><i class="fas fa-file-code"></i> PADRE Input Deck</h5>
-                <div class="d-flex gap-2">
-                    <button class="btn btn-sm btn-outline-primary" id="copyDeckBtn" disabled>
+            <div class="card-header py-2 d-flex align-items-center" style="cursor:pointer;"
+                 data-bs-toggle="collapse" data-bs-target="#logCollapse" aria-expanded="false">
+                <i class="fas fa-list-alt me-2 text-muted"></i>
+                <span class="fw-500 small">Progress Log</span>
+                <button class="btn btn-xs btn-outline-secondary ms-auto me-2" id="clearLogBtn"
+                        onclick="event.stopPropagation(); clearLog();" style="font-size:0.7rem;padding:1px 6px;">
+                    Clear
+                </button>
+                <i class="fas fa-chevron-down text-muted sim-collapse-icon"></i>
+            </div>
+            <div class="collapse" id="logCollapse">
+                <div class="card-body p-0">
+                    <div id="progressLog" class="progress-log">
+                        <div class="log-entry log-info">
+                            <span class="log-time">--:--:--</span>
+                            <span class="log-message">Simulation created, waiting to run...</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div><!-- /left col -->
+
+    <!-- Right Column: PADRE Input Deck -->
+    <div class="col-lg-7">
+        <div class="card h-100 d-flex flex-column">
+            <div class="card-header d-flex align-items-center gap-2 py-2">
+                <i class="fas fa-file-code text-muted"></i>
+                <span class="fw-500 small">PADRE Input Deck</span>
+                <div class="ms-auto d-flex gap-1">
+                    <button class="btn btn-xs btn-outline-secondary" id="copyDeckBtn" disabled
+                            style="font-size:0.7rem;padding:2px 8px;">
                         <i class="fas fa-copy"></i> Copy
                     </button>
-                    <button class="btn btn-sm btn-outline-secondary" id="expandDeckBtn" disabled>
+                    <button class="btn btn-xs btn-outline-secondary" id="expandDeckBtn" disabled
+                            style="font-size:0.7rem;padding:2px 8px;">
                         <i class="fas fa-expand"></i>
                     </button>
                 </div>
             </div>
-            <div class="card-body">
-                <div id="deckNotGenerated" class="text-center text-muted py-4">
-                    <i class="fas fa-file-code fa-3x mb-3 opacity-50"></i>
-                    <p>Deck will be generated when simulation runs</p>
+            <div class="card-body p-0 flex-grow-1 d-flex flex-column">
+                <div id="deckNotGenerated" class="text-center text-muted py-5 flex-grow-1 d-flex flex-column align-items-center justify-content-center">
+                    <i class="fas fa-file-code fa-2x mb-2 opacity-25"></i>
+                    <p class="small mb-0">Deck will be generated when simulation runs</p>
                 </div>
-                <pre id="deckDisplay" class="bg-light p-3 rounded" style="max-height: 300px; overflow-y: auto; display: none;"></pre>
+                <pre id="deckDisplay" class="deck-side-panel m-0 flex-grow-1" style="display:none;"></pre>
             </div>
         </div>
-    </div>
+    </div><!-- /right col -->
 
-    <div class="col-lg-4">
-        <div class="card mb-4">
-            <div class="card-header">
-                <h5 class="mb-0">Actions</h5>
-            </div>
-            <div class="card-body d-grid gap-2">
-                <button class="btn btn-primary btn-lg" id="runSimBtn" disabled>
-                    <i class="fas fa-play"></i> Run Simulation
-                </button>
-                <button class="btn btn-danger btn-lg" id="stopSimBtn" disabled style="display: none;">
-                    <i class="fas fa-stop"></i> Stop Simulation
-                </button>
-                <a class="btn btn-secondary btn-lg" id="viewResultsBtn" disabled href="#">
-                    <i class="fas fa-chart-bar"></i> View Results
-                </a>
-                <button class="btn btn-warning btn-lg" id="downloadDeckBtn" disabled>
-                    <i class="fas fa-download"></i> Download Deck
-                </button>
-                <button class="btn btn-outline-danger btn-lg" id="deleteSimBtn">
-                    <i class="fas fa-trash"></i> Delete
-                </button>
-            </div>
-        </div>
-
-        <div class="card">
-            <div class="card-header">
-                <h5 class="mb-0">Information</h5>
-            </div>
-            <div class="card-body small">
-                <div class="mb-2">
-                    <strong>Device Type:</strong>
-                    <span id="infoDeviceType">-</span>
-                </div>
-                <div class="mb-2">
-                    <strong>Created:</strong>
-                    <span id="infoCreated">-</span>
-                </div>
-                <div class="mb-2">
-                    <strong>Started:</strong>
-                    <span id="infoStarted">-</span>
-                </div>
-                <div class="mb-2">
-                    <strong>Completed:</strong>
-                    <span id="infoCompleted">-</span>
-                </div>
-                <div id="errorInfo" style="display: none;">
-                    <hr>
-                    <strong class="text-danger">Error:</strong>
-                    <p id="errorMessage" class="text-danger small"></p>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
+</div><!-- /row -->
 
 <!-- Fullscreen Deck Modal -->
 <div class="modal fade" id="deckFullscreenModal" tabindex="-1">
     <div class="modal-dialog modal-xl modal-dialog-scrollable">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title"><i class="fas fa-file-code"></i> PADRE Input Deck - Full View</h5>
+                <h5 class="modal-title"><i class="fas fa-file-code"></i> PADRE Input Deck</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body p-0">
