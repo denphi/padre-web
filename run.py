@@ -38,7 +38,37 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     # Get configuration from args or environment
-    base_path = args.base_path or os.environ.get('APPLICATION_ROOT', '')
+    path = os.environ.get('APPLICATION_ROOT', '')
+    if "SESSIONDIR" in os.environ:
+        sessiondir = os.environ["SESSIONDIR"]
+        fn = os.path.join(sessiondir, "resources")
+        with open(fn, "r") as f:
+            res = f.read()
+        hub_url = sessionid = app_name = token = cookie = cookieport = None
+        for line in res.split("\n"):
+            if line.startswith("hub_url"):
+                hub_url = line.split()[1]
+            elif line.startswith("sessionid"):
+                sessionid = int(line.split()[1])
+            elif line.startswith("application_name"):
+                app_name = line.split(" ", 1)[1]
+            elif line.startswith("session_token"):
+                token = line.split()[1]
+            elif line.startswith("filexfer_cookie"):
+                cookie = line.split()[1]
+            elif line.startswith("filexfer_port"):
+                cookieport = line.split()[1]
+        path = (
+            "/weber/"
+            + str(sessionid)
+            + "/"
+            + cookie
+            + "/"
+            + str(int(cookieport) % 1000)
+            + "/"
+        )
+
+    base_path = args.base_path or path
     port = args.port or int(os.environ.get('PORT', 8001))
 
     if args.no_debug:

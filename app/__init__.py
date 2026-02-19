@@ -27,11 +27,12 @@ def create_app(config=None, base_path=None):
     app = Flask(__name__)
 
     # Configuration
+    sessiondir = os.environ.get("RESULTSDIR", os.path.dirname(__file__))
     app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
     app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
-    app.config['UPLOAD_FOLDER'] = os.path.join(os.path.dirname(__file__), 'uploads')
-    app.config['SIMULATIONS_FOLDER'] = os.path.join(os.path.dirname(__file__), 'simulations')
-    app.config['OUTPUTS_FOLDER'] = os.path.join(os.path.dirname(__file__), 'outputs')
+    app.config['UPLOAD_FOLDER'] = os.path.join(sessiondir, 'uploads')
+    app.config['SIMULATIONS_FOLDER'] = os.path.join(sessiondir, 'simulations')
+    app.config['OUTPUTS_FOLDER'] = os.path.join(sessiondir, 'outputs')
 
     # Handle base path for proxy deployment
     base_path = base_path or os.environ.get('APPLICATION_ROOT', '')
