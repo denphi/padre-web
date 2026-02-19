@@ -49,6 +49,7 @@ class Simulation:
             'error_message': self.error_message,
             'progress': self.progress,
             'output_files': self.output_files,
+            'deck_content': self.deck_content,
         }
 
 
