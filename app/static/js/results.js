@@ -863,7 +863,7 @@ function plotSelectedFile(data, filename, fileType) {
             plotBandData(containerId, values, filename, variable, columns);
             break;
         case 'mesh':
-            plotMeshData(containerId, values, filename);
+            plotMeshData(containerId, values, filename, data.mesh_info);
             break;
         case 'carrier':
             plotCarrierData(containerId, values, filename, variable, columns);
@@ -1180,7 +1180,7 @@ function plotContourData(containerId, data, filename) {
     Plotly.newPlot(containerId, [trace], layout, { responsive: true });
 }
 
-function plotMeshData(containerId, values, filename) {
+function plotMeshData(containerId, values, filename, meshInfo) {
     const x = values.map(row => row[0]);
     const y = values.map(row => row[1]);
 
@@ -1216,7 +1216,9 @@ function plotMeshData(containerId, values, filename) {
         hovertemplate: 'x: %{x:.3f} µm<br>y: %{y:.3f} µm<extra></extra>' });
 
     const layout = {
-        title: `Device Mesh — ${values.length} nodes (${uniqueX.length}×${uniqueY.length})`,
+        title: meshInfo
+            ? `Device Mesh — ${meshInfo.nx}×${meshInfo.ny} = ${meshInfo.num_nodes} nodes${meshInfo.uniform ? ' (uniform)' : ' (non-uniform)'}`
+            : `Device Mesh — ${values.length} nodes (${uniqueX.length}×${uniqueY.length})`,
         xaxis: { title: 'X (µm)', gridcolor: '#e0e0e0', scaleanchor: 'y', scaleratio: 1 },
         yaxis: { title: 'Y (µm)', gridcolor: '#e0e0e0', autorange: 'reversed' },
         plot_bgcolor: '#fafafa',

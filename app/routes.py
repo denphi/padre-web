@@ -1005,52 +1005,89 @@ def _parse_contour_file(filepath, name_base, data):
 
 
 def _parse_mesh_file(filepath, lines, data, sim_params):
-    """Parse PADRE mesh file using the library parser."""
+    """Parse PADRE mesh file to extract node coordinates.
+
+    PADRE mesh files are ASCII by default (ASCII.Out=true). The format is:
+      - Header lines with ASCII codes
+      - A line: nx  ny  num_nodes  ...
+      - Node data in stride-5 layout: [x_cm, y_cm, phi, doping, ?] per node
+    """
     try:
-        from nanohubpadre.solution import SolutionParser
-        parser = SolutionParser()
-        # Extract device extents from simulation parameters (in µm)
-        x_extent = float(sim_params.get('length',
-                         sim_params.get('device_width',
-                         sim_params.get('width', 2.0))))
-        y_extent = float(sim_params.get('device_depth',
-                         sim_params.get('depth',
-                         sim_params.get('height', 2.0))))
-        x_coords, y_coords = parser.parse_mesh_file(filepath,
-                                                     x_extent=x_extent,
-                                                     y_extent=y_extent)
-        if len(x_coords) > 0:
-            values = [[float(x), float(y)] for x, y in zip(x_coords, y_coords)]
-            data['values'] = values
-            data['columns'] = ['X (µm)', 'Y (µm)']
-            return data
+        # --- Parse header line: nx  ny  num_nodes  ... ---
+        nx, ny, num_nodes = 0, 0, 0
+        for line in lines:
+            parts = line.split()
+            if len(parts) >= 3:
+                try:
+                    v1, v2, v3 = int(float(parts[0])), int(float(parts[1])), int(float(parts[2]))
+                    if v1 > 1 and v2 > 1 and v1 * v2 == v3:
+                        nx, ny, num_nodes = v1, v2, v3
+                        break
+                except (ValueError, OverflowError):
+                    continue
+
+        if nx == 0 or ny == 0:
+            raise ValueError("Could not find mesh dimensions in header")
+
+        # --- Collect all numeric values from the data section ---
+        # Skip the ASCII-code header line(s) and the dimension line; take everything after.
+        header_done = False
+        all_vals = []
+        for line in lines:
+            parts = line.split()
+            if not header_done:
+                try:
+                    v1, v2, v3 = int(float(parts[0])), int(float(parts[1])), int(float(parts[2]))
+                    if v1 > 1 and v2 > 1 and v1 * v2 == v3:
+                        header_done = True
+                        continue  # skip the header line itself
+                except (ValueError, IndexError, OverflowError):
+                    continue
+            else:
+                for part in parts:
+                    try:
+                        all_vals.append(float(part))
+                    except ValueError:
+                        continue
+
+        # --- Extract coordinates using stride-5 layout: [x, y, phi, doping, ?] per node ---
+        # Verify we have enough data
+        stride = 5
+        available = len(all_vals) // stride
+        if available >= num_nodes:
+            x_coords = [all_vals[i * stride + 0] * 1e4 for i in range(num_nodes)]  # cm → µm
+            y_coords = [all_vals[i * stride + 1] * 1e4 for i in range(num_nodes)]  # cm → µm
+
+            # Sanity-check: all coords should be non-negative and within device bounds
+            x_max = max(x_coords) if x_coords else 1.0
+            y_max = max(y_coords) if y_coords else 1.0
+            if x_max > 0 and y_max >= 0:
+                values = [[x, y] for x, y in zip(x_coords, y_coords)]
+                data['values'] = values
+                data['columns'] = ['X (µm)', 'Y (µm)']
+                data['mesh_info'] = {'nx': nx, 'ny': ny, 'num_nodes': num_nodes}
+                return data
+
+        raise ValueError(f"Stride-5 extraction failed: available={available}, needed={num_nodes}")
+
+    except Exception as e:
+        logger.warning(f"Mesh file parse failed ({e}), falling back to uniform grid from sim_params")
+
+    # --- Fallback: reconstruct uniform grid from simulation parameters ---
+    try:
+        nx = int(sim_params.get('nx', 10))
+        ny = int(sim_params.get('ny', 10))
+        x_max = float(sim_params.get('length', sim_params.get('device_width', sim_params.get('width', 1.0))))
+        y_max = float(sim_params.get('device_depth', sim_params.get('depth', sim_params.get('height', 1.0))))
+        import numpy as np
+        x_vals = np.linspace(0, x_max, nx)
+        y_vals = np.linspace(0, y_max, ny)
+        values = [[float(x), float(y)] for x in x_vals for y in y_vals]
+        data['values'] = values
+        data['columns'] = ['X (µm)', 'Y (µm)']
+        data['mesh_info'] = {'nx': nx, 'ny': ny, 'num_nodes': nx * ny, 'uniform': True}
     except Exception:
         pass
-
-    # Fallback: scan for pairs of small floats (coordinates in cm, convert to µm)
-    values = []
-    for line in lines:
-        parts = line.split()
-        for part in parts:
-            try:
-                v = float(part)
-                # Coordinates are small positive values (0–0.001 cm = 0–10 µm)
-                if 0 <= v < 0.001:
-                    values.append(v * 1e4)  # cm → µm
-            except ValueError:
-                continue
-
-    # Deduplicate and sort unique coordinate values — these are 1D grid lines
-    unique_vals = sorted(set(round(v, 4) for v in values))
-    if unique_vals:
-        # We only have 1D coordinate lists; emit as a scatter of all (x,y) grid crossings
-        # by combining first half as X candidates and second half as Y candidates
-        mid = len(unique_vals) // 2
-        x_vals = unique_vals[:mid] or unique_vals
-        y_vals = unique_vals[mid:] or unique_vals
-        rows = [[x, y] for x in x_vals for y in y_vals]
-        data['values'] = rows
-        data['columns'] = ['X (µm)', 'Y (µm)']
 
     return data
 
