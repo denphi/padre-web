@@ -5,6 +5,10 @@ import logging
 from logging.handlers import RotatingFileHandler
 import os
 import sys
+import uuid
+
+# Single token generated once per process — busts browser cache on every restart
+_STATIC_VERSION = uuid.uuid4().hex[:8]
 
 # Ensure the repo root (containing nanohubpadre package) is on the path
 # so the library is importable regardless of working directory.
@@ -70,10 +74,27 @@ def create_app(config=None, base_path=None):
     app.register_blueprint(results_bp)
     app.register_blueprint(builder_bp)
 
-    # Make base_path available in templates
+    # Store the version token on the app for use in url_for overrides
+    app.config['STATIC_VERSION'] = _STATIC_VERSION
+
+    # Make base_path and static_version available in templates
     @app.context_processor
-    def inject_base_path():
-        return {'base_path': app.config['APPLICATION_ROOT']}
+    def inject_globals():
+        return {
+            'base_path': app.config['APPLICATION_ROOT'],
+            'static_version': _STATIC_VERSION,
+        }
+
+    # Override url_for('static', ...) to append the version token
+    original_url_for = app.jinja_env.globals['url_for']
+
+    def versioned_url_for(endpoint, **values):
+        url = original_url_for(endpoint, **values)
+        if endpoint == 'static':
+            url = f"{url}?v={_STATIC_VERSION}"
+        return url
+
+    app.jinja_env.globals['url_for'] = versioned_url_for
 
     return app
 
