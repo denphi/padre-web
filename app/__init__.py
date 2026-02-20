@@ -32,13 +32,13 @@ def create_app(config=None, base_path=None, nanohub_terminate_url=None, nanohub_
     """
     app = Flask(__name__)
 
-    # Configuration
-    sessiondir = os.environ.get("RESULTSDIR", os.path.dirname(__file__))
+    # Configuration — all runtime data goes under RESULTSDIR (nanoHUB) or cwd (local)
+    resultsdir = os.environ.get("RESULTSDIR") or os.getcwd()
     app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
     app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
-    app.config['UPLOAD_FOLDER'] = os.path.join(sessiondir, 'uploads')
-    app.config['SIMULATIONS_FOLDER'] = os.path.join(sessiondir, 'simulations')
-    app.config['OUTPUTS_FOLDER'] = os.path.join(sessiondir, 'outputs')
+    app.config['UPLOAD_FOLDER'] = os.path.join(resultsdir, 'uploads')
+    app.config['SIMULATIONS_FOLDER'] = os.path.join(resultsdir, 'simulations')
+    app.config['OUTPUTS_FOLDER'] = os.path.join(resultsdir, 'outputs')
 
     # Handle base path for proxy deployment
     base_path = base_path or os.environ.get('APPLICATION_ROOT', '')
@@ -110,9 +110,9 @@ def create_app(config=None, base_path=None, nanohub_terminate_url=None, nanohub_
 def setup_logging(app):
     """Configure logging for the application."""
     if not app.debug and not app.testing:
-        if not os.path.exists('logs'):
-            os.mkdir('logs')
-        file_handler = RotatingFileHandler('logs/padre_web.log',
+        logs_dir = os.path.join(os.environ.get("RESULTSDIR") or os.getcwd(), 'logs')
+        os.makedirs(logs_dir, exist_ok=True)
+        file_handler = RotatingFileHandler(os.path.join(logs_dir, 'padre_web.log'),
                                           maxBytes=10240000,
                                           backupCount=10)
         file_handler.setFormatter(logging.Formatter(
