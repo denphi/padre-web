@@ -225,7 +225,8 @@ function renderOutputFiles(files) {
 
     for (const file of files) {
         const category = categorizeFile(file);
-        categories[category].files.push(file);
+        const bucket = categories[category] ? category : 'other';
+        categories[bucket].files.push(file);
     }
 
     // Build accordion HTML
