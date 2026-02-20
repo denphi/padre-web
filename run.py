@@ -74,8 +74,8 @@ if __name__ == '__main__':
     # Build nanoHUB support/terminate URLs when running on nanoHUB
     nanohub_terminate_url = None
     nanohub_support_url = None
-    if "SESSIONDIR" in os.environ and hub_url and app_name:
-        app_name_clean = app_name.strip()
+    if "SESSIONDIR" in os.environ and hub_url:
+        app_name_clean = "padrelab"
         hub = hub_url.rstrip('/')
         nanohub_terminate_url = f"{hub}/tools/{app_name_clean}/stop?sess={sessionid}"
         nanohub_support_url = f"{hub}/feedback/report_problems?group=app-{app_name_clean}"

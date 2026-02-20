@@ -81,6 +81,11 @@ body {
     z-index: 1020;
 }
 
+.padre-tabnav-inner {
+    display: flex;
+    align-items: stretch;
+}
+
 .padre-tabs {
     list-style: none;
     margin: 0;
@@ -149,6 +154,7 @@ body {
 /* Mobile collapse */
 @media (max-width: 991px) {
     .padre-tabnav { top: 64px; }
+    .padre-tabnav-inner { flex-direction: column; }
     .padre-tabs { flex-direction: column; }
     .padre-tabs a { height: 48px; padding: 0 20px; border-bottom: none; border-left: 3px solid transparent; }
     .padre-tabs a.active { border-left-color: var(--tabnav-active-accent); border-bottom: none; }
