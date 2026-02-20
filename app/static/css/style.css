@@ -107,6 +107,17 @@ body {
     white-space: nowrap;
 }
 
+.padre-tabs a i {
+    font-size: 0.8rem;
+    opacity: 0.55;
+    font-weight: 400;
+}
+
+.padre-tabs a:hover i,
+.padre-tabs a.active i {
+    opacity: 0.9;
+}
+
 .padre-tabs a:hover {
     background: var(--tabnav-hover-bg);
     color: #ffffff;
