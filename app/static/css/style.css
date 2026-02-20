@@ -131,12 +131,28 @@ body {
     font-weight: 600;
 }
 
+/* Right-aligned nanoHUB utility tabs (Support / Terminate) */
+.padre-tabs-right {
+    margin-left: auto;
+}
+
+.padre-tab-terminate {
+    color: #f87171 !important;
+}
+
+.padre-tab-terminate:hover {
+    background: rgba(220, 38, 38, 0.15) !important;
+    color: #fca5a5 !important;
+    border-bottom-color: #f87171 !important;
+}
+
 /* Mobile collapse */
 @media (max-width: 991px) {
     .padre-tabnav { top: 64px; }
     .padre-tabs { flex-direction: column; }
     .padre-tabs a { height: 48px; padding: 0 20px; border-bottom: none; border-left: 3px solid transparent; }
     .padre-tabs a.active { border-left-color: var(--tabnav-active-accent); border-bottom: none; }
+    .padre-tabs-right { margin-left: 0; }
     #padreNavTabs { display: none; }
     #padreNavTabs.show { display: block; }
 }

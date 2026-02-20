@@ -71,6 +71,15 @@ if __name__ == '__main__':
     base_path = args.base_path or path
     port = args.port or int(os.environ.get('PORT', 8001))
 
+    # Build nanoHUB support/terminate URLs when running on nanoHUB
+    nanohub_terminate_url = None
+    nanohub_support_url = None
+    if "SESSIONDIR" in os.environ and hub_url and app_name:
+        app_name_clean = app_name.strip()
+        hub = hub_url.rstrip('/')
+        nanohub_terminate_url = f"{hub}/tools/{app_name_clean}/stop?sess={sessionid}"
+        nanohub_support_url = f"{hub}/feedback/report_problems?group=app-{app_name_clean}"
+
     if args.no_debug:
         debug = False
     elif args.debug:
@@ -78,7 +87,9 @@ if __name__ == '__main__':
     else:
         debug = os.environ.get('DEBUG', 'True') == 'True'
 
-    app = create_app(base_path=base_path)
+    app = create_app(base_path=base_path,
+                     nanohub_terminate_url=nanohub_terminate_url,
+                     nanohub_support_url=nanohub_support_url)
 
     base_path_display = base_path if base_path else '(none)'
     print(f"""

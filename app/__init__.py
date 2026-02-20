@@ -21,12 +21,14 @@ if os.path.isdir(os.path.join(_repo_root, 'nanohubpadre')) and _repo_root not in
     sys.path.insert(0, _repo_root)
 
 
-def create_app(config=None, base_path=None):
+def create_app(config=None, base_path=None, nanohub_terminate_url=None, nanohub_support_url=None):
     """Create and configure the Flask application.
 
     Args:
         config: Optional configuration dictionary
         base_path: Optional URL prefix for running behind a proxy (e.g., '/padre')
+        nanohub_terminate_url: Optional nanoHUB URL to terminate the session
+        nanohub_support_url: Optional nanoHUB URL to submit a support request
     """
     app = Flask(__name__)
 
@@ -77,12 +79,18 @@ def create_app(config=None, base_path=None):
     # Store the version token on the app for use in url_for overrides
     app.config['STATIC_VERSION'] = _STATIC_VERSION
 
+    # Store nanoHUB URLs in app config
+    app.config['NANOHUB_TERMINATE_URL'] = nanohub_terminate_url
+    app.config['NANOHUB_SUPPORT_URL'] = nanohub_support_url
+
     # Make base_path and static_version available in templates
     @app.context_processor
     def inject_globals():
         return {
             'base_path': app.config['APPLICATION_ROOT'],
             'static_version': _STATIC_VERSION,
+            'nanohub_terminate_url': app.config['NANOHUB_TERMINATE_URL'],
+            'nanohub_support_url': app.config['NANOHUB_SUPPORT_URL'],
         }
 
     # Override url_for('static', ...) to append the version token

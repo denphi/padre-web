@@ -32,7 +32,7 @@
 
     <!-- ── Tab navigation bar ────────────────────────────────── -->
     <nav class="padre-tabnav" id="padreNavTabs">
-        <div class="container-fluid px-4">
+        <div class="container-fluid px-4 d-flex">
             <ul class="padre-tabs" id="mainNavTabs">
                 <li>
                     <a href="{{ base_path }}/" data-path="/">
@@ -50,6 +50,24 @@
                     </a>
                 </li>
             </ul>
+            {% if nanohub_support_url or nanohub_terminate_url %}
+            <ul class="padre-tabs padre-tabs-right ms-auto">
+                {% if nanohub_support_url %}
+                <li>
+                    <a href="{{ nanohub_support_url }}" target="_blank">
+                        <i class="fas fa-life-ring"></i> Support
+                    </a>
+                </li>
+                {% endif %}
+                {% if nanohub_terminate_url %}
+                <li>
+                    <a href="{{ nanohub_terminate_url }}" class="padre-tab-terminate">
+                        <i class="fas fa-power-off"></i> Terminate
+                    </a>
+                </li>
+                {% endif %}
+            </ul>
+            {% endif %}
         </div>
     </nav>
 
