@@ -30,13 +30,6 @@ body {
     color: var(--text-primary);
     font-size: 0.9rem;
     letter-spacing: 0.01em;
-    min-height: 100vh;
-    display: flex;
-    flex-direction: column;
-}
-
-.container-fluid {
-    flex: 1;
 }
 
 /* ── Brand header ──────────────────────────────────────── */
@@ -370,8 +363,13 @@ code {
 
 /* ── Footer ─────────────────────────────────────────────── */
 .footer {
-    margin-top: auto;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 1010;
     border-top: 1px solid var(--border-color);
+    background: #f8f9fa;
     color: var(--text-muted);
     font-size: 0.78rem;
     letter-spacing: 0.02em;

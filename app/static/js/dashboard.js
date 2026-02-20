@@ -50,7 +50,7 @@ function updateStats() {
 
 function renderSimulations() {
     const tbody = document.getElementById('simTableBody');
-    
+
     if (allSimulations.length === 0) {
         tbody.innerHTML = `
             <tr>
@@ -61,9 +61,32 @@ function renderSimulations() {
         `;
         return;
     }
-    
+
     const basePath = getBasePath();
-    tbody.innerHTML = allSimulations.map(sim => `
+    tbody.innerHTML = allSimulations.map(sim => {
+        const isCompleted = sim.status === 'completed';
+        const isFailed = sim.status === 'failed';
+        const isRunning = sim.status === 'running';
+
+        const resultsBtn = isCompleted
+            ? `<a href="${basePath}/results/${sim.id}" class="btn btn-sm btn-success" title="View Results" onclick="event.stopPropagation()">
+                   <i class="fas fa-chart-line"></i>
+               </a>`
+            : '';
+
+        const rerunBtn = (isCompleted || isFailed)
+            ? `<button class="btn btn-sm btn-warning" title="Re-run" onclick="event.stopPropagation(); rerunSim('${sim.id}')">
+                   <i class="fas fa-redo"></i>
+               </button>`
+            : '';
+
+        const deleteBtn = !isRunning
+            ? `<button class="btn btn-sm btn-danger" title="Delete" onclick="event.stopPropagation(); deleteSim('${sim.id}', '${sim.name.replace(/'/g, "\\'")}')">
+                   <i class="fas fa-trash"></i>
+               </button>`
+            : '';
+
+        return `
         <tr style="cursor: pointer;" onclick="window.location.href='${basePath}/simulation/${sim.id}'">
             <td><strong>${sim.name}</strong></td>
             <td>
@@ -86,12 +109,42 @@ function renderSimulations() {
                 </div>
             </td>
             <td>
-                <a href="${basePath}/simulation/${sim.id}" class="btn btn-sm btn-outline-primary" title="View details">
-                    <i class="fas fa-arrow-right"></i>
-                </a>
+                <div class="btn-group" role="group">
+                    ${resultsBtn}
+                    ${rerunBtn}
+                    ${deleteBtn}
+                </div>
             </td>
         </tr>
-    `).join('');
+        `;
+    }).join('');
+}
+
+async function rerunSim(simId) {
+    try {
+        const result = await apiCall(`/api/simulation/rerun/${simId}`, 'POST');
+        if (result.success) {
+            loadSimulations();
+        } else {
+            alert('Re-run failed: ' + (result.error || 'Unknown error'));
+        }
+    } catch (error) {
+        alert('Re-run failed: ' + error.message);
+    }
+}
+
+async function deleteSim(simId, simName) {
+    if (!confirm(`Delete simulation "${simName}"?`)) return;
+    try {
+        const result = await apiCall(`/api/simulation/${simId}`, 'DELETE');
+        if (result.success) {
+            loadSimulations();
+        } else {
+            alert('Delete failed: ' + (result.error || 'Unknown error'));
+        }
+    } catch (error) {
+        alert('Delete failed: ' + error.message);
+    }
 }
 
 window.addEventListener('beforeunload', () => {
