@@ -497,17 +497,30 @@ def list_output_files(sim_id):
         if not os.path.exists(output_dir):
             return jsonify({'success': True, 'files': []}), 200
         
+        # Load known type map from stored simulation metadata
+        output_file_types = {}
+        try:
+            store = get_simulation_store()
+            sim = store.get(sim_id)
+            if sim:
+                output_file_types = sim.output_file_types or {}
+        except Exception:
+            pass
+
         files = []
         for filename in os.listdir(output_dir):
             filepath = os.path.join(output_dir, filename)
             if os.path.isfile(filepath):
                 size = os.path.getsize(filepath)
-                files.append({
+                entry = {
                     'name': filename,
                     'size': size,
                     'path': filepath
-                })
-        
+                }
+                if filename in output_file_types:
+                    entry['known_type'] = output_file_types[filename]
+                files.append(entry)
+
         return jsonify({'success': True, 'files': files}), 200
     
     except Exception as e:
@@ -553,16 +566,20 @@ def get_file_content(sim_id, filename):
             return jsonify({'success': False, 'error': 'File not found'}), 404
 
         # Parse the file based on its type
-        # For mesh files, look up simulation parameters to pass extents
+        # Look up the stored type metadata and simulation parameters
         sim_params = {}
+        known_type = None
         try:
             store = get_simulation_store()
             sim = store.get(sim_id)
             if sim:
-                sim_params = {**sim.parameters, **sim.outputs, **sim.sweep}
+                sim_params = dict(sim.parameters)
+                # Use the type recorded at simulation build time (filename → type string)
+                known_type = sim.output_file_types.get(filename)
         except Exception:
             pass
-        data = _parse_padre_output_file(filepath, filename, sim_params=sim_params)
+        data = _parse_padre_output_file(filepath, filename, sim_params=sim_params,
+                                        known_type=known_type)
 
         # Add debug info
         data['debug'] = {
@@ -583,13 +600,20 @@ def get_file_content(sim_id, filename):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
-def _parse_padre_output_file(filepath, filename, sim_params=None):
+def _parse_padre_output_file(filepath, filename, sim_params=None, known_type=None):
     """Parse a PADRE output file.
 
     Uses manual parsing that matches the format expected by nanohubpadre library.
     PADRE ASCII files have:
     - Comment lines starting with # or $ or !
     - Data lines with space-separated numeric values
+
+    Parameters
+    ----------
+    known_type : str, optional
+        Type string from the simulation's output_file_types registry
+        ('iv', 'cv', 'band', 'qf', 'carrier', 'field', 'contour', 'mesh', 'solution').
+        When provided, skips name-based guessing.
     """
     import logging
     logger = logging.getLogger(__name__)
@@ -612,18 +636,45 @@ def _parse_padre_output_file(filepath, filename, sim_params=None):
         first_lines = content[:500] if len(content) > 500 else content
         logger.info(f"Parsing file {filename}, first content: {repr(first_lines[:200])}")
 
-        # Always use manual parsing (works regardless of library availability)
-        # This matches the format used by nanohubpadre library
         lines = content.strip().split('\n')
         name_lower = filename.lower()
         name_base = name_lower.replace('.txt', '').replace('.dat', '').replace('.out', '').replace('.log', '')
 
-        # Detect PADRE IV log file by content first (# PADRE header + Q-records)
+        # --- Use authoritative type from simulation registry when available ---
+        if known_type == 'iv':
+            data['type'] = 'iv'
+            data['variable'] = 'iv'
+            data = _parse_iv_file(lines, data)
+            return data
+        elif known_type == 'cv':
+            data['type'] = 'cv'
+            data['variable'] = 'cv'
+            data = _parse_iv_file(lines, data)
+            return data
+        elif known_type == 'contour':
+            data = _parse_contour_file(filepath, name_base, data)
+            return data
+        elif known_type == 'mesh':
+            data['type'] = 'mesh'
+            data['variable'] = 'mesh'
+            data = _parse_mesh_file(filepath, lines, data, sim_params or {})
+            return data
+        elif known_type == 'solution':
+            data['type'] = 'solution'
+            data['variable'] = 'solution'
+            data['values'] = []
+            return data
+        elif known_type in ('band', 'qf', 'carrier', 'field'):
+            # 1D plot — determine variable from filename since known_type is broad
+            data = _dispatch_1d_plot(name_base, lines, data, known_type)
+            return data
+
+        # --- Fallback: content-based then name-based detection ---
+
+        # Detect PADRE IV log file by content (# PADRE header + Q-records)
         # This catches any filename (iv, idvd, idvg, idvb, log, etc.)
         _is_padre_iv = content.lstrip().startswith('# PADRE')
 
-        # Use pattern matching for file type
-        # PADRE uses naming conventions like: vbeq, cbeq, cbfwd, vbfwd, qfnfwd, qfpfwd, mesh, iv
         # Match the same IV heuristics as the JS categorizeFile() frontend function
         _iv_by_name = (name_base == 'iv' or name_base.endswith('_iv') or
                        name_base.startswith('iv') or 'iv' in name_base or
@@ -809,6 +860,43 @@ def _parse_iv_file(lines, data):
         if len(values[0]) > 2:
             data['columns'].extend([f'Column {i+1}' for i in range(2, len(values[0]))])
 
+    return data
+
+
+def _dispatch_1d_plot(name_base, lines, data, known_type):
+    """Route a known 1D plot file to the correct variable/columns based on filename."""
+    # Variable name → (web_variable, y_label, type_override)
+    _name_to_var = [
+        # Band diagrams
+        (['vb', 'ev', 'valence', 'vband'], 'band_val', 'Energy (eV)', 'band'),
+        (['cb', 'ec', 'conduction', 'cband'], 'band_con', 'Energy (eV)', 'band'),
+        # Quasi-Fermi
+        (['qfn', 'efn'], 'qfn', 'Energy (eV)', 'qf'),
+        (['qfp', 'efp'], 'qfp', 'Energy (eV)', 'qf'),
+        # Carriers
+        (['ele', 'electron', 'ncarrier'], 'electrons', 'Concentration (/cm³)', 'carrier'),
+        (['hole', 'pcarrier'], 'holes', 'Concentration (/cm³)', 'carrier'),
+        (['netcar', 'net_carrier'], 'net_carrier', 'Concentration (/cm³)', 'carrier'),
+        # Fields / potential
+        (['pot', 'phi', 'psi', 'potential'], 'potential', 'Potential (V)', 'field'),
+        (['dop', 'doping', 'dopant'], 'doping', 'Concentration (/cm³)', 'field'),
+        (['efield', 'field', 'ef_'], 'e_field', 'Field (V/cm)', 'field'),
+        (['recomb'], 'recomb', 'Rate (/cm³/s)', 'field'),
+    ]
+
+    for prefixes, var, y_label, t in _name_to_var:
+        if any(name_base.startswith(p) or p in name_base for p in prefixes):
+            data['type'] = t
+            data['variable'] = var
+            data = _parse_1d_plot_file(lines, data)
+            data['columns'] = ['Position (μm)', y_label]
+            return data
+
+    # Generic fallback within the known_type
+    data['type'] = known_type
+    data['variable'] = 'unknown'
+    data = _parse_1d_plot_file(lines, data)
+    data['columns'] = ['Position (μm)', 'Value']
     return data
 
 
@@ -1321,12 +1409,14 @@ def _on_simulation_progress(sim_id: str, progress: float, message: str):
                 )
             else:
                 output_files = runner.output_files if runner else []
+                output_file_types = getattr(runner, 'output_file_types', {})
                 store.update(
                     sim_id,
                     status=SimulationStatus.COMPLETED,
                     progress=100.0,
                     completed_at=datetime.now(),
                     output_files=output_files,
+                    output_file_types=output_file_types,
                     deck_content=runner.deck_content if runner else None
                 )
             if sim_id in _running_simulations:

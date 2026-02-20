@@ -15,11 +15,80 @@ try:
         create_mos_capacitor, create_bjt, create_schottky_diode,
         create_solar_cell, Solve, Log, Models, System, Method
     )
+    from nanohubpadre.outputs import get_plot1d_variable
+    from nanohubpadre.plotting import Plot1D
+    from nanohubpadre.plot3d import Plot3D
     PADRE_AVAILABLE = True
 except ImportError:
     PADRE_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
+
+
+def _build_output_file_types(sim) -> dict:
+    """
+    Inspect a nanohubpadre Simulation object and return a dict mapping
+    each expected output filename (basename) to its type string.
+
+    Type strings match what the results page expects:
+      'iv', 'cv', 'band', 'qf', 'carrier', 'field', 'contour', 'mesh', 'solution'
+    """
+    if not PADRE_AVAILABLE:
+        return {}
+
+    # Map Plot1D variable names → web type strings
+    _var_to_type = {
+        'band_val':   'band',
+        'band_con':   'band',
+        'qfn':        'qf',
+        'qfp':        'qf',
+        'electrons':  'carrier',
+        'holes':      'carrier',
+        'net_carrier':'carrier',
+        'potential':  'field',
+        'doping':     'field',
+        'e_field':    'field',
+        'recomb':     'field',
+        'net_charge': 'field',
+        'j_electr':   'field',
+        'j_hole':     'field',
+        'j_total':    'field',
+        'j_conduc':   'field',
+        'v_electr':   'field',
+        'v_hole':     'field',
+        'ion_imp':    'field',
+        'j_displa':   'field',
+        'n_temp':     'field',
+        'p_temp':     'field',
+    }
+
+    type_map = {}
+
+    # Mesh
+    if hasattr(sim, '_mesh') and sim._mesh and hasattr(sim._mesh, 'outfile') and sim._mesh.outfile:
+        type_map[sim._mesh.outfile] = 'mesh'
+
+    for cmd in getattr(sim, '_commands', []):
+        if isinstance(cmd, Solve):
+            if hasattr(cmd, 'outfile') and cmd.outfile:
+                type_map[cmd.outfile] = 'solution'
+
+        elif isinstance(cmd, Log):
+            if hasattr(cmd, 'ivfile') and cmd.ivfile:
+                type_map[cmd.ivfile] = 'iv'
+            if hasattr(cmd, 'acfile') and cmd.acfile:
+                type_map[cmd.acfile] = 'cv'
+
+        elif isinstance(cmd, Plot1D):
+            if hasattr(cmd, 'outfile') and cmd.outfile:
+                var = get_plot1d_variable(cmd)
+                type_map[cmd.outfile] = _var_to_type.get(var, 'field')
+
+        elif isinstance(cmd, Plot3D):
+            if hasattr(cmd, 'outfile') and cmd.outfile:
+                type_map[cmd.outfile] = 'contour'
+
+    return type_map
 
 
 def _build_contour_quantities(params: dict) -> list:
@@ -50,6 +119,7 @@ class SimulationRunner:
         self.is_running = False
         self.error: Optional[str] = None
         self.output_files = []
+        self.output_file_types: dict = {}  # filename → type string
         self.deck_content = ""
     
     def start(self) -> None:
@@ -80,6 +150,8 @@ class SimulationRunner:
 
             # Create simulation based on device type
             sim = self._create_device_simulation()
+            # Record the type of each expected output file before running
+            self.output_file_types = _build_output_file_types(sim)
             self._update_progress(15, "Device configured")
 
             # Set working directory for simulation outputs

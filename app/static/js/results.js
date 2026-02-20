@@ -118,8 +118,13 @@ async function loadOutputFiles() {
     }
 }
 
-function categorizeFile(filename) {
-    // Helper function to categorize a file based on its name
+function categorizeFile(fileOrName) {
+    // Accepts either a plain filename string or a file object {name, known_type, ...}.
+    // When the simulation registry provides known_type, use it directly — no guessing.
+    if (fileOrName && typeof fileOrName === 'object' && fileOrName.known_type) {
+        return fileOrName.known_type;
+    }
+    const filename = (typeof fileOrName === 'object') ? fileOrName.name : fileOrName;
     // PADRE uses names like: vband, cband, pot, ele, hole, qfn, qfp, efield, mesh, iv, etc.
     const name = filename.toLowerCase();
     // Remove common extensions for pattern matching
@@ -219,7 +224,7 @@ function renderOutputFiles(files) {
     };
 
     for (const file of files) {
-        const category = categorizeFile(file.name);
+        const category = categorizeFile(file);
         categories[category].files.push(file);
     }
 
@@ -399,7 +404,7 @@ async function onCategoryPlotAll(category, files) {
 async function plotAllBandDiagrams(files) {
     // Also include qf files if plotting band diagrams
     const allBandFiles = outputFiles.filter(file => {
-        const cat = categorizeFile(file.name);
+        const cat = categorizeFile(file);
         return cat === 'band' || cat === 'qf';
     });
 
@@ -1258,7 +1263,7 @@ async function loadAndDisplayData(files) {
     const cvFiles = [];
 
     for (const file of files) {
-        const category = categorizeFile(file.name);
+        const category = categorizeFile(file);
         switch (category) {
             case 'iv':
                 ivFiles.push(file);

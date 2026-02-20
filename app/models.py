@@ -31,6 +31,7 @@ class Simulation:
         self.completed_at: Optional[datetime] = None
         self.error_message: Optional[str] = None
         self.output_files: List[str] = []
+        self.output_file_types: Dict[str, str] = {}  # filename → type ('iv','band','contour','mesh','solution',...)
         self.progress: float = 0.0
         self.deck_content: Optional[str] = None
         self.results: Dict[str, Any] = {}
@@ -49,6 +50,7 @@ class Simulation:
             'error_message': self.error_message,
             'progress': self.progress,
             'output_files': self.output_files,
+            'output_file_types': self.output_file_types,
             'deck_content': self.deck_content,
         }
 
@@ -111,6 +113,7 @@ class SimulationStore:
             'error_message': simulation.error_message,
             'progress': simulation.progress,
             'output_files': simulation.output_files,
+            'output_file_types': simulation.output_file_types,
             'deck_content': simulation.deck_content,
         }
         with open(json_file, 'w') as f:
@@ -135,6 +138,7 @@ class SimulationStore:
                     sim.error_message = data.get('error_message')
                     sim.progress = data.get('progress', 0.0)
                     sim.output_files = data.get('output_files', [])
+                    sim.output_file_types = data.get('output_file_types', {})
                     sim.deck_content = data.get('deck_content')
                     self.simulations[sim.id] = sim
             except Exception as e:
